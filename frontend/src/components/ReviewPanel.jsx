@@ -134,6 +134,10 @@ export default function ReviewPanel({ job, onSubmit, onReset, onTokensAdded }) {
             {sections[activeIdx] && <ConfidenceBadge confidence={sections[activeIdx].confidence} />}
           </div>
           <div className="view-toggle">
+            <div
+              className="view-toggle-pill"
+              style={{ transform: `translateX(${viewMode === 'edit' ? '0%' : viewMode === 'split' ? '100%' : '200%'})` }}
+            />
             <button className={`view-toggle-btn ${viewMode === 'edit' ? 'active' : ''}`}    onClick={() => setViewMode('edit')}>Edit</button>
             <button className={`view-toggle-btn ${viewMode === 'split' ? 'active' : ''}`}   onClick={() => setViewMode('split')}>Split</button>
             <button className={`view-toggle-btn ${viewMode === 'preview' ? 'active' : ''}`} onClick={() => setViewMode('preview')}>Preview</button>

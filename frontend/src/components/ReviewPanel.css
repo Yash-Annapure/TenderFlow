@@ -119,22 +119,45 @@
   border: 1px solid transparent; flex-shrink: 0;
 }
 
-/* View mode toggle */
+/* ── Sliding pill toggle ────────────────────────────────────────────────── */
 .view-toggle {
-  display: flex; border: 1px solid var(--border-light);
-  border-radius: var(--radius); overflow: hidden;
+  display: flex;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  overflow: hidden;
   flex-shrink: 0;
+  background: var(--bg);
+  position: relative;
+}
+
+.view-toggle-pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 33.333%;
+  height: 100%;
+  background: var(--accent);
+  border-radius: calc(var(--radius) - 1px);
+  transition: transform var(--dur-base, 220ms) var(--ease-out-expo, cubic-bezier(0.16,1,0.3,1));
+  pointer-events: none;
+  z-index: 0;
 }
 
 .view-toggle-btn {
-  padding: 5px 14px; font-size: 12px; font-weight: 500;
-  background: none; color: var(--text-dim);
-  transition: background 0.15s, color 0.15s;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  background: none;
+  color: var(--text-dim);
+  transition: color var(--dur-fast, 120ms);
   border-right: 1px solid var(--border-light);
+  position: relative;
+  z-index: 1;
 }
+
 .view-toggle-btn:last-child { border-right: none; }
-.view-toggle-btn:hover { color: var(--text); background: var(--surface-hover); }
-.view-toggle-btn.active { background: var(--accent); color: #fff; }
+.view-toggle-btn:hover { color: var(--text); }
+.view-toggle-btn.active { color: #fff; }
 
 .review-submit-topbar-btn {
   padding: 6px 16px; background: var(--accent); color: #fff;
