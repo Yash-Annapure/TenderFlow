@@ -80,3 +80,10 @@ app.include_router(kb.router)
 @app.get("/health", tags=["system"])
 def health():
     return {"status": "ok", "service": "TenderFlow", "version": "0.1.0"}
+
+if __name__ == "__main__":
+    import uvicorn
+    # When run directly (e.g. `python main.py`), start the uvicorn server
+    # to provide output and run the application.
+    logger.info("Starting uvicorn server directly from main.py...")
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
