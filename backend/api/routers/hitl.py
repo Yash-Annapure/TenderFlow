@@ -155,8 +155,10 @@ def _resume_graph(tender_id: str) -> None:
             logger.error(f"[hitl] Failed to update job {tender_id}: {e}")
 
     try:
-        # graph.invoke(None, config) resumes from the last checkpoint
-        graph.invoke(None, config)
+        # stream resume so we can update status as finalise node runs
+        for chunk in graph.stream(None, config, stream_mode="updates"):
+            if "finalise" in chunk:
+                _update_job(STATUS_FINALISING)
 
         state_snapshot = graph.get_state(config)
         current_values = state_snapshot.values
