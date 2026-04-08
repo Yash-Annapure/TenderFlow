@@ -44,3 +44,24 @@ def test_query_includes_tender_excerpt():
     query = _build_section_query(section, tender_excerpt="AI ecosystem mapping procurement 2024")
 
     assert "AI ecosystem mapping" in query
+
+
+def test_query_includes_section_name():
+    """Query must include the section name."""
+    from agents.nodes.retrieve_context import _build_section_query
+
+    section = _make_section(name="Technical Methodology")
+    query = _build_section_query(section, tender_excerpt="some context")
+
+    assert "Technical Methodology" in query
+
+
+def test_query_handles_none_requirements():
+    """Must not raise TypeError when requirements is explicitly None."""
+    from agents.nodes.retrieve_context import _build_section_query
+
+    section = _make_section()
+    section["requirements"] = None  # explicit None, not missing key
+
+    query = _build_section_query(section, tender_excerpt="context")
+    assert isinstance(query, str)

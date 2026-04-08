@@ -45,7 +45,7 @@ def retrieve_context(state: TenderState) -> dict:
 
     retrieved_chunks: dict[str, list[dict]] = {}
 
-    tender_excerpt = (state.get("tender_text") or "")[:300]
+    tender_excerpt = state.get("tender_text") or ""
     queries = [_build_section_query(s, tender_excerpt) for s in state["sections"]]
 
     from core.embeddings import embed_queries
@@ -127,10 +127,10 @@ def _build_section_query(section: dict, tender_excerpt: str) -> str:
     Build a rich embedding query for a section.
     Uses all requirements (not just first 3) plus a tender excerpt for context.
     """
-    all_reqs = " | ".join(section.get("requirements", []))
+    all_reqs = " | ".join(section.get("requirements") or [])
     return (
-        f"{section['section_name']}: {all_reqs}"
-        f"\nTender context: {tender_excerpt[:200]}"
+        f"{section.get('section_name', '')}: {all_reqs}"
+        f"\nTender context: {tender_excerpt[:300]}"
     )
 
 
