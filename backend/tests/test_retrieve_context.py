@@ -164,3 +164,68 @@ def test_settings_threshold_is_0_40():
     import config.settings as settings_mod
     importlib.invalidate_caches()
     assert settings_mod.settings.retrieval_threshold == pytest.approx(0.40, abs=0.01)
+
+
+def test_m1_uses_similarity_not_raw_count():
+    """M1 should reward high-similarity chunks over many low-similarity chunks."""
+    from agents.nodes.retrieve_context import _compute_primary_scores
+
+    high_sim_chunks = {
+        "s1": [{"doc_type": "past_tender", "similarity": 0.90}],
+    }
+    low_sim_chunks = {
+        "s1": [
+            {"doc_type": "past_tender", "similarity": 0.31},
+            {"doc_type": "past_tender", "similarity": 0.32},
+            {"doc_type": "past_tender", "similarity": 0.33},
+        ],
+    }
+
+    state = _make_state(sections=[_make_section()])
+    high_scores = _compute_primary_scores(state, high_sim_chunks)
+    low_scores = _compute_primary_scores(state, low_sim_chunks)
+
+    assert high_scores["M1_track_record"] > low_scores["M1_track_record"]
+
+
+def test_m4_uses_similarity_not_raw_count():
+    """M4 should reward high-similarity CV chunks."""
+    from agents.nodes.retrieve_context import _compute_primary_scores
+
+    high_sim_chunks = {
+        "s1": [{"doc_type": "cv", "similarity": 0.88}],
+    }
+    low_sim_chunks = {
+        "s1": [
+            {"doc_type": "cv", "similarity": 0.31},
+            {"doc_type": "cv", "similarity": 0.32},
+            {"doc_type": "cv", "similarity": 0.31},
+        ],
+    }
+
+    state = _make_state(sections=[_make_section()])
+    high_scores = _compute_primary_scores(state, high_sim_chunks)
+    low_scores = _compute_primary_scores(state, low_sim_chunks)
+
+    assert high_scores["M4_delivery_credibility"] > low_scores["M4_delivery_credibility"]
+
+
+def test_m1_zero_when_no_past_tender_chunks():
+    """M1 must be 0.0 when no past_tender chunks retrieved."""
+    from agents.nodes.retrieve_context import _compute_primary_scores
+
+    state = _make_state(sections=[_make_section()])
+    scores = _compute_primary_scores(state, {"s1": [{"doc_type": "cv", "similarity": 0.8}]})
+    assert scores["M1_track_record"] == 0.0
+
+
+def test_m1_caps_at_100():
+    """M1 must never exceed 100."""
+    from agents.nodes.retrieve_context import _compute_primary_scores
+
+    chunks = {
+        "s1": [{"doc_type": "past_tender", "similarity": 1.0} for _ in range(20)],
+    }
+    state = _make_state(sections=[_make_section()])
+    scores = _compute_primary_scores(state, chunks)
+    assert scores["M1_track_record"] <= 100.0

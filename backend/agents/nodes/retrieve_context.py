@@ -212,12 +212,22 @@ def _rerank_chunks(
 def _compute_primary_scores(state: TenderState, retrieved_chunks: dict) -> dict[str, float]:
     scores: dict[str, float] = {}
 
-    # M1: Track Record — past tender chunks retrieved
-    past_chunks = sum(
-        len([c for c in chunks if c.get("doc_type") == "past_tender"])
+    # M1: Track Record — similarity-weighted past tender coverage
+    # Avg similarity is the primary quality driver; count provides a sub-linear
+    # volume bonus (square-root dampened, saturates at 5 chunks) so a single
+    # high-similarity chunk scores better than several low-similarity ones.
+    past_sims = [
+        c.get("similarity", 0.5)
         for chunks in retrieved_chunks.values()
-    )
-    scores["M1_track_record"] = min(past_chunks * 15.0, 100.0)
+        for c in chunks
+        if c.get("doc_type") == "past_tender"
+    ]
+    if past_sims:
+        avg_sim = sum(past_sims) / len(past_sims)
+        count_factor = min(len(past_sims) / 5.0, 1.0) ** 0.5
+        scores["M1_track_record"] = min(avg_sim * count_factor * 100.0, 100.0)
+    else:
+        scores["M1_track_record"] = 0.0
 
     # M2: Expertise Depth — doc_type coverage across all section needs
     total_needed = sum(len(s.get("doc_types_needed", [])) for s in state["sections"])
@@ -244,12 +254,21 @@ def _compute_primary_scores(state: TenderState, retrieved_chunks: dict) -> dict[
         methodology_chunks, state.get("tender_text", "")[:1000]
     )
 
-    # M4: Delivery Credibility — CV coverage
-    cv_chunks = sum(
-        len([c for c in chunks if c.get("doc_type") == "cv"])
+    # M4: Delivery Credibility — similarity-weighted CV coverage
+    # Avg similarity is the primary quality driver; count provides a sub-linear
+    # volume bonus (square-root dampened, saturates at 4 chunks).
+    cv_sims = [
+        c.get("similarity", 0.5)
         for chunks in retrieved_chunks.values()
-    )
-    scores["M4_delivery_credibility"] = min(cv_chunks * 20.0, 100.0)
+        for c in chunks
+        if c.get("doc_type") == "cv"
+    ]
+    if cv_sims:
+        avg_sim = sum(cv_sims) / len(cv_sims)
+        count_factor = min(len(cv_sims) / 4.0, 1.0) ** 0.5
+        scores["M4_delivery_credibility"] = min(avg_sim * count_factor * 100.0, 100.0)
+    else:
+        scores["M4_delivery_credibility"] = 0.0
 
     # M5: Pricing — neutral when no pricing data in KB
     scores["M5_pricing"] = 70.0
