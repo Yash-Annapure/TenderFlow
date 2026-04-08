@@ -208,3 +208,10 @@
     slideInUp var(--dur-slow, 380ms) var(--ease-out-expo, cubic-bezier(0.16,1,0.3,1)) 260ms both,
     borderGlow 3s ease 1.2s infinite;
 }
+
+/* ── View enter animations ───────────────────────────────────────────────── */
+.landing,
+.chat-view,
+.review-layout {
+  animation: slideInUp var(--dur-slow, 380ms) var(--ease-out-expo, cubic-bezier(0.16,1,0.3,1)) both;
+}
