@@ -45,10 +45,8 @@ def retrieve_context(state: TenderState) -> dict:
 
     retrieved_chunks: dict[str, list[dict]] = {}
 
-    queries = []
-    for section in state["sections"]:
-        query = f"{section['section_name']}: {' '.join(section['requirements'][:3])}"
-        queries.append(query)
+    tender_excerpt = (state.get("tender_text") or "")[:300]
+    queries = [_build_section_query(s, tender_excerpt) for s in state["sections"]]
 
     from core.embeddings import embed_queries
     # Single batch call to evade Voyage AI 3 RPM free tier rate limit
@@ -120,6 +118,20 @@ def retrieve_context(state: TenderState) -> dict:
         "primary_score_total": primary_total,
         "status": STATUS_RETRIEVING,
     }
+
+
+# ── Query Formulation ─────────────────────────────────────────────────────────
+
+def _build_section_query(section: dict, tender_excerpt: str) -> str:
+    """
+    Build a rich embedding query for a section.
+    Uses all requirements (not just first 3) plus a tender excerpt for context.
+    """
+    all_reqs = " | ".join(section.get("requirements", []))
+    return (
+        f"{section['section_name']}: {all_reqs}"
+        f"\nTender context: {tender_excerpt[:200]}"
+    )
 
 
 # ── Primary Scoring Modules ───────────────────────────────────────────────────
