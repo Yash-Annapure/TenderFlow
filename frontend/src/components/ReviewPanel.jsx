@@ -2,12 +2,11 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { getReview, submitReview, reiterateSection } from '../api/client.js'
 import ScoreCard from './ScoreCard'
 import DocxPreview from './DocxPreview'
-import TokenMeter from './TokenMeter'
 import './ReviewPanel.css'
 
 const CONFIDENCE_COLOR = { HIGH: '#10a37f', MEDIUM: '#f59e0b', LOW: '#ef4444' }
 
-export default function ReviewPanel({ job, onSubmit, onReset, tokenLog, onTokensAdded }) {
+export default function ReviewPanel({ job, onSubmit, onReset, onTokensAdded }) {
   const [review,        setReview]        = useState(null)
   const [sections,      setSections]      = useState([])
   const [feedback,      setFeedback]      = useState('')
@@ -124,7 +123,6 @@ export default function ReviewPanel({ job, onSubmit, onReset, tokenLog, onTokens
           ))}
         </div>
 
-        <TokenMeter tokenLog={tokenLog} />
       </div>
 
       {/* ── Right panel ── */}

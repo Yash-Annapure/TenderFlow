@@ -11,6 +11,7 @@ import {
 import './App.css'
 
 export default function App() {
+  const [showSplash,     setShowSplash]     = useState(true)
   const [job,            setJob]            = useState(null)
   const [messages,       setMessages]       = useState([])
   const [activeToolCall, setActiveToolCall] = useState(null)
@@ -124,6 +125,8 @@ export default function App() {
     setTokenLog(emptyLog())
   }, [])
 
+  if (showSplash) return <SplashScreen onDone={() => setShowSplash(false)} />
+
   return (
     <div className="app-layout">
       <Sidebar currentJob={job} tokenLog={tokenLog} />
@@ -221,6 +224,27 @@ function LandingView({ onJobStarted }) {
               <span className="pipeline-label">{step}</span>
             </div>
           ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SplashScreen({ onDone }) {
+  useEffect(() => {
+    // Unmount after CSS fade-out finishes (1.55s delay + 0.45s animation = 2s)
+    const t = setTimeout(onDone, 2000)
+    return () => clearTimeout(t)
+  }, [onDone])
+
+  return (
+    <div className="splash">
+      <div className="splash-inner">
+        <div className="splash-logo-mark">TF</div>
+        <h1 className="splash-title">TenderFlow</h1>
+        <p className="splash-tagline">AI-powered tender response agent</p>
+        <div className="splash-bar">
+          <div className="splash-bar-fill" />
         </div>
       </div>
     </div>

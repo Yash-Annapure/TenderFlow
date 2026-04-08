@@ -70,3 +70,7 @@ a {
   color: var(--accent);
   text-decoration: none;
 }
+
+@keyframes fadeIn  { from { opacity: 0 } to { opacity: 1 } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(20px) } to { opacity: 1; transform: translateY(0) } }
+@keyframes fadeOut { from { opacity: 1; pointer-events: all } to { opacity: 0; pointer-events: none } }

@@ -11,7 +11,7 @@ export default function DocxPreview({ sections = [], filename = 'Tender Response
   const sectionsHtml = useMemo(() =>
     sections.map(s => ({
       ...s,
-      html: textToHtml(s.user_edits || s.draft_text || ''),
+      html: textToHtml(s.finalised_content || s.user_edits || s.draft_text || ''),
     })),
     [sections]
   )
