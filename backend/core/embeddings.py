@@ -49,3 +49,12 @@ def embed_query(query: str) -> list[float]:
     client = _get_client()
     result = client.embed([query], model=EMBEDDING_MODEL, input_type="query")
     return result.embeddings[0]
+
+
+def embed_queries(queries: list[str]) -> list[list[float]]:
+    """Embed multiple retrieval queries in one API call to avoid rate limits."""
+    if not queries:
+        return []
+    client = _get_client()
+    result = client.embed(queries, model=EMBEDDING_MODEL, input_type="query")
+    return result.embeddings

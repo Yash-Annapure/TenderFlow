@@ -35,6 +35,7 @@ def retrieve_chunks(
     sector_tags: Optional[list[str]] = None,
     top_k: Optional[int] = None,
     threshold: Optional[float] = None,
+    query_embedding: Optional[list[float]] = None,
 ) -> list[dict]:
     """
     Perform a cosine similarity search against kb_chunks.
@@ -67,7 +68,7 @@ def retrieve_chunks(
     )
 
     # Embed the query
-    embedding = embed_query(query)
+    embedding = query_embedding or embed_query(query)
 
     try:
         result = supabase.rpc(

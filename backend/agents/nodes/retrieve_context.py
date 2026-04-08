@@ -45,15 +45,24 @@ def retrieve_context(state: TenderState) -> dict:
 
     retrieved_chunks: dict[str, list[dict]] = {}
 
+    queries = []
     for section in state["sections"]:
+        query = f"{section['section_name']}: {' '.join(section['requirements'][:3])}"
+        queries.append(query)
+
+    from core.embeddings import embed_queries
+    # Single batch call to evade Voyage AI 3 RPM free tier rate limit
+    query_embeddings = embed_queries(queries)
+
+    for i, section in enumerate(state["sections"]):
         section_id = section["section_id"]
         doc_types = section.get("doc_types_needed") or None
-        query = f"{section['section_name']}: {' '.join(section['requirements'][:3])}"
 
         chunks = retrieve_chunks(
-            query=query,
+            query=queries[i],
             doc_types=doc_types,
             threshold=settings.retrieval_threshold,
+            query_embedding=query_embeddings[i],
         )
         retrieved_chunks[section_id] = chunks
         logger.debug(
