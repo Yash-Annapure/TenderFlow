@@ -156,3 +156,11 @@ def test_rerank_retains_originals_when_all_score_below_threshold():
     result = _rerank_chunks(mock_client, "Background", ["req"], chunks)
     assert len(result) == 2  # returned originals, not empty
     assert result == chunks
+
+
+def test_settings_threshold_is_0_40():
+    """Default retrieval threshold must be 0.40."""
+    import importlib
+    import config.settings as settings_mod
+    importlib.invalidate_caches()
+    assert settings_mod.settings.retrieval_threshold == pytest.approx(0.40, abs=0.01)
