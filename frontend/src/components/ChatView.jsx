@@ -1,12 +1,20 @@
-import { useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import ScoreCard from './ScoreCard'
 import './ChatView.css'
 
-const TOOL_META = {
-  analyse_tender:   { icon: '🔍', color: '#6366f1', label: 'analyse_tender',   desc: 'Extracting tender structure' },
-  retrieve_context: { icon: '🗄️',  color: '#0ea5e9', label: 'retrieve_context', desc: 'Querying knowledge base' },
-  draft_sections:   { icon: '✍️',  color: '#10a37f', label: 'draft_sections',   desc: 'Drafting response sections' },
-  finalise:         { icon: '✨',  color: '#f59e0b', label: 'finalise',          desc: 'Finalising document' },
+const PIPELINE_STEPS = [
+  { key: 'analyse_tender',   label: 'analyse_tender',   desc: 'Extracting tender structure' },
+  { key: 'retrieve_context', label: 'retrieve_context', desc: 'Querying knowledge base' },
+  { key: 'draft_sections',   label: 'draft_sections',   desc: 'Drafting response sections' },
+  { key: 'finalise',         label: 'finalise',         desc: 'Finalising document' },
+]
+
+// Estimated duration (ms) for progress bar animation per step
+const STEP_DURATION = {
+  analyse_tender:   12000,
+  retrieve_context: 18000,
+  draft_sections:   40000,
+  finalise:         20000,
 }
 
 export default function ChatView({ job, messages, activeToolCall, onReset }) {
@@ -16,9 +24,13 @@ export default function ChatView({ job, messages, activeToolCall, onReset }) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, activeToolCall])
 
+  // Non-tool messages: user, agent-done, done, error (agent messages with tool prop are shown by pipeline)
+  const displayMessages = messages.filter(
+    m => m.type !== 'agent' || !m.tool
+  )
+
   return (
     <div className="chat-view">
-      {/* Top bar */}
       <div className="chat-topbar">
         <div className="chat-topbar-title">
           <FileIcon />
@@ -28,29 +40,183 @@ export default function ChatView({ job, messages, activeToolCall, onReset }) {
         <button className="chat-new-btn" onClick={onReset}>+ New Tender</button>
       </div>
 
-      {/* Messages */}
       <div className="chat-messages">
-        {messages.map(msg => (
+        {/* User upload message */}
+        {displayMessages.filter(m => m.type === 'user').map(msg => (
           <Message key={msg.id} msg={msg} />
         ))}
 
-        {/* Active tool call indicator */}
-        {activeToolCall && (
-          <div className="tool-running">
-            <span className="tool-running-dot" />
-            <span className="tool-running-name">
-              Calling: <code>{activeToolCall}</code>
-            </span>
-            <span className="tool-running-desc">
-              {TOOL_META[activeToolCall]?.desc}
-            </span>
-          </div>
-        )}
+        {/* Tool pipeline — all 4 steps shown upfront */}
+        <div className="msg msg--pipeline">
+          <ToolPipeline messages={messages} activeToolCall={activeToolCall} job={job} />
+        </div>
+
+        {/* Final state messages: agent-done, done, error */}
+        {displayMessages.filter(m => m.type !== 'user').map(msg => (
+          <Message key={msg.id} msg={msg} />
+        ))}
 
         <div ref={bottomRef} />
       </div>
     </div>
   )
+}
+
+function ToolPipeline({ messages, activeToolCall, job }) {
+  const [expanded, setExpanded] = useState({})
+
+  const toggleExpanded = (key) =>
+    setExpanded(prev => ({ ...prev, [key]: !prev[key] }))
+
+  const doneTools = new Set(
+    messages.filter(m => m.type === 'agent' && m.tool).map(m => m.tool)
+  )
+
+  return (
+    <div className="tool-pipeline">
+      {PIPELINE_STEPS.map((step) => {
+        const isDone    = doneTools.has(step.key) && activeToolCall !== step.key
+        const isActive  = activeToolCall === step.key
+        const isPending = !isDone && !isActive
+        const isOpen    = expanded[step.key] ?? false
+
+        return (
+          <ToolCard
+            key={step.key}
+            step={step}
+            isDone={isDone}
+            isActive={isActive}
+            isPending={isPending}
+            isOpen={isOpen}
+            onToggle={() => isDone && toggleExpanded(step.key)}
+            job={job}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
+function ToolCard({ step, isDone, isActive, isPending, isOpen, onToggle, job }) {
+  const elapsed = useElapsedTimer(isActive)
+
+  let borderColor = 'transparent'
+  if (isActive) borderColor = 'var(--accent)'
+  if (isDone)   borderColor = 'var(--green)'
+
+  return (
+    <div
+      className={[
+        'tool-card',
+        isDone    && 'tool-card--done',
+        isActive  && 'tool-card--active',
+        isPending && 'tool-card--pending',
+      ].filter(Boolean).join(' ')}
+      style={{ '--card-border-color': borderColor }}
+    >
+      <div className="tool-card-header" onClick={onToggle}>
+        <ToolCardIcon isDone={isDone} isActive={isActive} />
+        <span className="tool-card-name">{step.label}</span>
+        {isActive && (
+          <span className="tool-card-status">
+            {step.desc.split(' ')[0].toLowerCase()}
+            <span className="tool-card-dots">
+              <span style={{ animationDelay: '0ms' }} />
+              <span style={{ animationDelay: '180ms' }} />
+              <span style={{ animationDelay: '360ms' }} />
+            </span>
+          </span>
+        )}
+        {isDone && elapsed > 0 && <span className="tool-card-elapsed">{elapsed}s</span>}
+        {isDone && (
+          <span className="tool-card-chevron">{isOpen ? '▾' : '›'}</span>
+        )}
+        {isActive && <span className="tool-card-elapsed tool-card-elapsed--active">{elapsed}s</span>}
+      </div>
+
+      {isActive && (
+        <div
+          className="tool-card-progress"
+          style={{ '--step-duration': `${STEP_DURATION[step.key]}ms` }}
+        />
+      )}
+
+      {isDone && isOpen && (
+        <div className="tool-card-output">
+          <ToolOutput stepKey={step.key} job={job} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ToolCardIcon({ isDone, isActive }) {
+  if (isDone) return (
+    <div className="tool-card-icon tool-card-icon--done">
+      <svg width="9" height="9" viewBox="0 0 12 12" fill="none">
+        <polyline points="2,6 5,9 10,3" stroke="var(--green)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </div>
+  )
+  if (isActive) return <div className="tool-card-icon tool-card-icon--spinner" />
+  return <div className="tool-card-icon tool-card-icon--pending" />
+}
+
+function ToolOutput({ stepKey, job }) {
+  const lines = []
+  if (stepKey === 'analyse_tender') {
+    const sections = job?.sections_json?.map(s => s.section_name) ?? []
+    lines.push(['sections', sections.length ? JSON.stringify(sections) : '—'])
+    const compliance = job?.score_json?.compliance_score ?? null
+    if (compliance != null) lines.push(['compliance_score', compliance.toFixed(1)])
+  }
+  if (stepKey === 'retrieve_context') {
+    lines.push(['status', 'context retrieved'])
+  }
+  if (stepKey === 'draft_sections') {
+    const count = job?.sections_json?.length ?? '—'
+    lines.push(['sections_drafted', String(count)])
+  }
+  if (stepKey === 'finalise') {
+    const score = job?.score_json?.final_score ?? null
+    if (score != null) lines.push(['final_score', `${score.toFixed(1)}/100`])
+    if (job?.tender_filename) lines.push(['output', job.tender_filename.replace(/\.[^.]+$/, '.docx')])
+  }
+  if (lines.length === 0) lines.push(['status', 'done'])
+
+  return (
+    <div className="tool-output-lines">
+      {lines.map(([k, v]) => (
+        <div key={k} className="tool-output-line">
+          <span className="tool-output-arrow">→</span>
+          <span className="tool-output-key">{k}</span>
+          <span className="tool-output-val">{v}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function useElapsedTimer(active) {
+  const [elapsed, setElapsed] = useState(0)
+  const startRef = useRef(null)
+
+  useEffect(() => {
+    if (active) {
+      startRef.current = Date.now()
+      const id = setInterval(() => {
+        setElapsed(((Date.now() - startRef.current) / 1000).toFixed(1))
+      }, 100)
+      return () => clearInterval(id)
+    } else {
+      if (startRef.current) {
+        setElapsed(((Date.now() - startRef.current) / 1000).toFixed(1))
+        startRef.current = null
+      }
+    }
+  }, [active])
+
+  return elapsed
 }
 
 function Message({ msg }) {
@@ -63,12 +229,11 @@ function Message({ msg }) {
   }
 
   if (msg.type === 'agent') {
-    const meta = TOOL_META[msg.tool] || {}
     return (
       <div className="msg msg--agent">
-        <div className="msg-agent-icon">{meta.icon || '🤖'}</div>
+        <div className="msg-agent-icon">🤖</div>
         <div className="msg-content">
-          <div className="msg-tool-badge" style={{ color: meta.color || '#6366f1' }}>
+          <div className="msg-tool-badge" style={{ color: '#6366f1' }}>
             <span className="msg-tool-fn">{msg.tool || 'agent'}</span>
           </div>
           <div className="msg-heading">{msg.heading}</div>

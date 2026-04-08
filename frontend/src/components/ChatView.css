@@ -192,49 +192,198 @@
 
 .download-btn:hover { opacity: 0.85; color: #fff; }
 
-/* ── Active tool call indicator ─────────────────────────────────────────── */
-.tool-running {
-  max-width: 720px;
+/* ── Tool pipeline ──────────────────────────────────────────────────────── */
+.msg--pipeline {
+  padding: 0 24px;
+}
+
+.tool-pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 672px;
   width: 100%;
-  margin: 0 auto;
-  padding: 6px 24px;
+}
+
+/* ── Tool card base ─────────────────────────────────────────────────────── */
+.tool-card {
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  position: relative;
+  animation: slideInUp var(--dur-base, 220ms) var(--ease-out-expo, cubic-bezier(0.16,1,0.3,1)) both;
+}
+
+.tool-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--card-border-color, transparent);
+  border-radius: 2px 0 0 2px;
+  transition: background 0.3s;
+}
+
+/* ── Card states ─────────────────────────────────────────────────────────── */
+.tool-card--pending {
+  background: #0f0f0f;
+  border-color: #1a1a1a;
+  opacity: 0.45;
+}
+
+.tool-card--active {
+  border-color: rgba(99, 102, 241, 0.2);
+}
+
+.tool-card--active::before {
+  box-shadow: 0 0 6px rgba(99, 102, 241, 0.5);
+}
+
+/* ── Card header ─────────────────────────────────────────────────────────── */
+.tool-card-header {
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 10px 13px 10px 16px;
+  cursor: default;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+.tool-card--done .tool-card-header {
+  cursor: pointer;
 }
 
-.tool-running-dot {
-  width: 7px;
-  height: 7px;
+.tool-card-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: 'Courier New', monospace;
+  flex: 1;
+}
+
+.tool-card--pending .tool-card-name {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.tool-card-status {
+  font-size: 10px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tool-card-dots {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+
+.tool-card-dots span {
+  width: 3px;
+  height: 3px;
   border-radius: 50%;
   background: var(--accent);
-  animation: pulse 1.4s ease-in-out infinite;
+  display: inline-block;
+  animation: dotTrail 1.2s ease infinite;
+}
+
+.tool-card-elapsed {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.tool-card-elapsed--active {
+  color: var(--accent);
+}
+
+.tool-card-chevron {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-left: 2px;
+}
+
+/* ── Card icons ──────────────────────────────────────────────────────────── */
+.tool-card-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tool-card-icon--done {
+  background: rgba(16, 163, 127, 0.15);
+  border: 1px solid rgba(16, 163, 127, 0.3);
+}
+
+.tool-card-icon--spinner {
+  border: 1.5px solid rgba(99, 102, 241, 0.2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spinRing 0.7s linear infinite;
+}
+
+.tool-card-icon--pending {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+}
+
+/* ── Live progress bar ───────────────────────────────────────────────────── */
+.tool-card-progress {
+  height: 1.5px;
+  background: #1a1a1a;
+  overflow: hidden;
+}
+
+.tool-card-progress::after {
+  content: '';
+  display: block;
+  height: 100%;
+  width: 85%;
+  background: linear-gradient(90deg, var(--accent), #818cf8);
+  animation: barSlide var(--step-duration, 20000ms) var(--ease-in-out, cubic-bezier(0.4,0,0.2,1)) both;
+}
+
+/* ── Expandable output ───────────────────────────────────────────────────── */
+.tool-card-output {
+  border-top: 1px solid #1a1a1a;
+  padding: 9px 16px 11px;
+  animation: expandDown var(--dur-base, 220ms) var(--ease-out-expo, cubic-bezier(0.16,1,0.3,1)) both;
+}
+
+.tool-output-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tool-output-line {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 10px;
+  font-family: 'Courier New', monospace;
+  line-height: 1.8;
+}
+
+.tool-output-arrow {
+  color: var(--border-light);
   flex-shrink: 0;
 }
 
-.tool-running-name {
-  font-size: 13px;
-  color: #ececf1;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.tool-running-name code {
-  font-family: 'Courier New', monospace;
-  font-size: 12px;
-  color: var(--accent);
-  background: var(--accent-dim);
-  padding: 1px 5px;
-  border-radius: 4px;
-}
-
-.tool-running-desc {
-  font-size: 12px;
+.tool-output-key {
   color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.tool-output-val {
+  color: var(--text-muted);
+  word-break: break-all;
 }
