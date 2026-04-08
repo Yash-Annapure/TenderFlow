@@ -48,8 +48,8 @@ def run(state: TenderState) -> dict:
         return {"final_draft": draft, "status": "done"}
 
     msg = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=6000,
+        model="claude-haiku-4-5-20251001",
+        max_tokens=3000,
         messages=[{
             "role": "user",
             "content": _PROMPT.format(draft=draft, feedback=feedback, edits=edits),

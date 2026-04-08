@@ -45,12 +45,12 @@ def run(state: TenderState) -> dict:
         return {"status": "error", "error": "No tender text provided"}
 
     # Truncate very long tenders to avoid token limits
-    if len(tender_text) > 12000:
-        tender_text = tender_text[:12000] + "\n\n[... truncated for analysis ...]"
+    if len(tender_text) > 6000:
+        tender_text = tender_text[:6000] + "\n\n[... truncated ...]"
 
     msg = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=2000,
+        max_tokens=1200,
         messages=[{
             "role": "user",
             "content": _PROMPT.format(tender_text=tender_text),

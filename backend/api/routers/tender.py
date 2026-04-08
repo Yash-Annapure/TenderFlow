@@ -89,6 +89,8 @@ def _run_graph(tender_id: str, tender_text: str):
         ):
             # Each step is a dict of {node_name: state_updates}
             for node_name, updates in step.items():
+                if not isinstance(updates, dict):
+                    continue  # skip __interrupt__ tuples emitted by LangGraph
                 logger.info(f"[{tender_id}] node={node_name} status={updates.get('status', '?')}")
                 _jobs[tender_id].update({
                     "status": updates.get("status", _jobs[tender_id]["status"]),
@@ -120,6 +122,8 @@ def _resume_graph(tender_id: str, user_feedback: str, user_edits: str):
     try:
         for step in graph.stream(None, config=config, stream_mode="updates"):
             for node_name, updates in step.items():
+                if not isinstance(updates, dict):
+                    continue  # skip __interrupt__ tuples emitted by LangGraph
                 logger.info(f"[{tender_id}] resume node={node_name} status={updates.get('status', '?')}")
                 _jobs[tender_id].update({
                     "status": updates.get("status", _jobs[tender_id]["status"]),

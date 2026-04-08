@@ -59,5 +59,19 @@ def health():
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    import argparse
+    parser = argparse.ArgumentParser(description="TenderFlow backend")
+    parser.add_argument("--debug", action="store_true", help="Launch Gradio debug UI instead of the API server")
+    parser.add_argument("--port", type=int, default=7860, help="Port for debug UI (default: 7860)")
+    args = parser.parse_args()
+
+    if args.debug:
+        import importlib.util
+        _ui_path = Path(__file__).parent.parent / "debug_ui" / "app.py"
+        _spec = importlib.util.spec_from_file_location("debug_ui.app", _ui_path)
+        _mod = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        _mod.launch(port=args.port)
+    else:
+        import uvicorn
+        uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
