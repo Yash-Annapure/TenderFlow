@@ -78,8 +78,23 @@
 }
 .review-nav-item:hover { background: var(--surface-hover); color: var(--text); }
 .review-nav-item--active {
-  background: var(--accent-dim); color: var(--text);
+  background: var(--accent-dim);
+  color: var(--text);
   border: 1px solid rgba(99,102,241,0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.review-nav-item--active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 0 1px 1px 0;
+  animation: expandDown var(--dur-base, 220ms) var(--ease-out-expo, cubic-bezier(0.16,1,0.3,1)) both;
 }
 
 .review-nav-name {
@@ -271,6 +286,8 @@
   border-radius: var(--radius);
   padding: 12px 14px;
   display: flex; flex-direction: column; gap: 8px;
+  animation: expandDown var(--dur-base, 220ms) var(--ease-out-expo, cubic-bezier(0.16,1,0.3,1)) both;
+  overflow: hidden;
 }
 
 .reiterate-hint {
