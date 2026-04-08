@@ -52,6 +52,8 @@ def retrieve_context(state: TenderState) -> dict:
     # Single batch call to evade Voyage AI 3 RPM free tier rate limit
     query_embeddings = embed_queries(queries)
 
+    client = _get_client()
+
     for i, section in enumerate(state["sections"]):
         section_id = section["section_id"]
         doc_types = section.get("doc_types_needed") or None
@@ -62,9 +64,17 @@ def retrieve_context(state: TenderState) -> dict:
             threshold=settings.retrieval_threshold,
             query_embedding=query_embeddings[i],
         )
+
+        chunks = _rerank_chunks(
+            client,
+            section.get("section_name", ""),
+            section.get("requirements") or [],
+            chunks,
+        )
+
         retrieved_chunks[section_id] = chunks
         logger.debug(
-            f"[retrieve_context] Section '{section_id}': {len(chunks)} chunks retrieved"
+            f"[retrieve_context] Section '{section_id}': {len(chunks)} chunks after rerank"
         )
 
     # Update section confidence flags
@@ -132,6 +142,58 @@ def _build_section_query(section: dict, tender_excerpt: str) -> str:
         f"{section.get('section_name', '')}: {all_reqs}"
         f"\nTender context: {tender_excerpt[:300]}"
     )
+
+
+def _rerank_chunks(
+    client: anthropic.Anthropic,
+    section_name: str,
+    requirements: list[str],
+    chunks: list[dict],
+) -> list[dict]:
+    """
+    Use Haiku to score each chunk's relevance to the section (0-10).
+    Drops chunks scoring below 5. Falls back to original list on any error.
+    Skips the API call entirely when chunks is empty.
+    """
+    if not chunks:
+        return chunks
+
+    reqs_text = "; ".join(requirements[:5])
+    numbered = "\n".join(
+        f"{i}. [{c.get('doc_type', 'doc')}] {c.get('chunk_text', '')[:200]}"
+        for i, c in enumerate(chunks)
+    )
+
+    try:
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=60,
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        f"Section: {section_name}\n"
+                        f"Requirements: {reqs_text}\n\n"
+                        f"Rate each chunk's relevance 0-10:\n{numbered}\n\n"
+                        "Respond with ONLY comma-separated integers, one per chunk. Example: 8,3,7"
+                    ),
+                }
+            ],
+        )
+        scores_text = response.content[0].text.strip()
+        scores = [float(s.strip()) for s in scores_text.split(",")]
+
+        if len(scores) != len(chunks):
+            logger.warning(f"[rerank] Score count mismatch ({len(scores)} vs {len(chunks)}), skipping rerank")
+            return chunks
+
+        kept = [c for c, s in zip(chunks, scores) if s >= 5.0]
+        logger.debug(f"[rerank] '{section_name}': {len(chunks)} → {len(kept)} chunks after rerank")
+        return kept if kept else chunks  # never return empty if we had chunks
+
+    except Exception as e:
+        logger.warning(f"[rerank] Haiku call failed for '{section_name}': {e} — using original chunks")
+        return chunks
 
 
 # ── Primary Scoring Modules ───────────────────────────────────────────────────
