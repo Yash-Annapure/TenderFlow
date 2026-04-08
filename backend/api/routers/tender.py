@@ -182,6 +182,8 @@ def _run_graph(tender_id: str, initial_state: TenderState) -> None:
         # Check where the graph paused
         state_snapshot = graph.get_state(config)
         current_values = state_snapshot.values
+        logger.info(f"[tender] Graph returned — state_snapshot.next={state_snapshot.next!r}")
+        logger.info(f"[tender] sections in state: {len(current_values.get('sections', []))}")
 
         if state_snapshot.next and "human_review" in state_snapshot.next:
             # Paused at HITL interrupt — save draft sections for frontend
@@ -189,6 +191,7 @@ def _run_graph(tender_id: str, initial_state: TenderState) -> None:
                 {k: v for k, v in s.items() if k not in ("user_edits", "finalised_content")}
                 for s in current_values.get("sections", [])
             ]
+            logger.info(f"[tender] sections_for_frontend count: {len(sections_for_frontend)}")
             score_json = {
                 "primary_score_total": current_values.get("primary_score_total", 0),
                 "compliance_score": current_values.get("compliance_score", 0),

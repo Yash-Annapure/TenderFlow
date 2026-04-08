@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     # ── Retrieval ─────────────────────────────────────────────────────────────
     retrieval_top_k_default: int = 6
     retrieval_top_k_cv: int = 3
-    retrieval_threshold: float = 0.40
+    retrieval_threshold: float = 0.60
 
     # ── HITL ──────────────────────────────────────────────────────────────────
     max_hitl_iterations: int = 3
