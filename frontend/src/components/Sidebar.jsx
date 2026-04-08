@@ -17,12 +17,67 @@ const DOC_TYPE_COLORS = {
   company_profile: '#f59e0b',
 }
 
+const STEP_LABELS = {
+  analysing:       { label: 'analysing' },
+  retrieving:      { label: 'retrieving' },
+  drafting:        { label: 'drafting' },
+  finalising:      { label: 'finalising' },
+  awaiting_review: { label: 'review ready' },
+  done:            { label: 'complete' },
+  error:           { label: 'error' },
+}
+
+const STEP_ORDER = ['analysing', 'retrieving', 'drafting', 'finalising']
+
+function JobStatusCard({ job }) {
+  const meta = STEP_LABELS[job.status] || { label: job.status }
+  const stepIdx = STEP_ORDER.indexOf(job.status)
+  const progressPct = stepIdx === -1
+    ? (job.status === 'awaiting_review' || job.status === 'done' ? 100 : 0)
+    : Math.round(((stepIdx + 0.5) / STEP_ORDER.length) * 100)
+
+  const isActive = stepIdx !== -1
+  const isDone   = job.status === 'done' || job.status === 'awaiting_review'
+  const isError  = job.status === 'error'
+
+  const dotColor = isError ? 'var(--red)' : isDone ? 'var(--green)' : 'var(--accent)'
+
+  return (
+    <div className="job-status-card">
+      <div className="job-status-card-row">
+        <div className="job-status-dot" style={{ background: dotColor, boxShadow: isActive ? `0 0 6px ${dotColor}` : 'none' }} />
+        <span className="job-status-filename">{job.tender_filename || 'tender.pdf'}</span>
+      </div>
+      <div className="job-status-label">
+        {meta.label}
+        {isActive && (
+          <span className="job-status-dots">
+            <span style={{ animationDelay: '0ms' }} />
+            <span style={{ animationDelay: '180ms' }} />
+            <span style={{ animationDelay: '360ms' }} />
+          </span>
+        )}
+        {isDone && job.score_json?.final_score != null && (
+          <span className="job-status-score">{job.score_json.final_score.toFixed(1)}/100</span>
+        )}
+      </div>
+      <div className="job-status-bar-track">
+        <div
+          className="job-status-bar-fill"
+          style={{ '--bar-target': `${progressPct}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
 export default function Sidebar({ currentJob, tokenLog }) {
   const [docs, setDocs] = useState([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState(null)
   const [showModal, setShowModal] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
   const pollRef = useRef(null)
 
   const fetchDocs = async () => {
@@ -78,66 +133,74 @@ export default function Sidebar({ currentJob, tokenLog }) {
   }, {})
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : ''}`}>
+      {/* Toggle tab */}
+      <button
+        className="sidebar-toggle"
+        onClick={() => setCollapsed(v => !v)}
+        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      >
+        {collapsed ? '›' : '‹'}
+      </button>
+
       <div className="sidebar-header">
         <div className="sidebar-logo">
           <span className="sidebar-logo-mark">TF</span>
-          <span className="sidebar-logo-name">TenderFlow</span>
+          {!collapsed && <span className="sidebar-logo-name">TenderFlow</span>}
         </div>
       </div>
 
-      <div className="sidebar-section-title">Knowledge Base</div>
+      {!collapsed && (
+        <>
+          {currentJob && (
+            <JobStatusCard job={currentJob} />
+          )}
 
-      <div className="sidebar-kb">
-        {loading ? (
-          <div className="sidebar-empty">Loading...</div>
-        ) : docs.length === 0 ? (
-          <div className="sidebar-empty">No documents ingested yet</div>
-        ) : (
-          Object.entries(grouped).map(([type, items]) => (
-            <div key={type} className="kb-group">
-              <div className="kb-group-label" style={{ color: DOC_TYPE_COLORS[type] || '#8e8ea0' }}>
-                {DOC_TYPE_LABELS[type] || type}
-                <span className="kb-count">{items.length}</span>
-              </div>
-              {items.map(doc => (
-                <div key={doc.id} className="kb-doc">
-                  <DocIcon type={type} />
-                  <div className="kb-doc-info">
-                    <span className="kb-doc-name" title={doc.filename}>{doc.source_name || doc.filename}</span>
-                    <span className="kb-doc-meta">{doc.chunk_count ?? '—'} chunks</span>
+          <div className="sidebar-section-title">Knowledge Base</div>
+
+          <div className="sidebar-kb">
+            {loading ? (
+              <div className="sidebar-empty">Loading...</div>
+            ) : docs.length === 0 ? (
+              <div className="sidebar-empty">No documents ingested yet</div>
+            ) : (
+              Object.entries(grouped).map(([type, items]) => (
+                <div key={type} className="kb-group">
+                  <div className="kb-group-label" style={{ color: DOC_TYPE_COLORS[type] || '#8e8ea0' }}>
+                    {DOC_TYPE_LABELS[type] || type}
+                    <span className="kb-count">{items.length}</span>
                   </div>
-                  <StatusDot status={doc.status} />
+                  {items.map((doc, idx) => (
+                    <div key={doc.id} className="kb-doc" style={{ animationDelay: `${idx * 60}ms` }}>
+                      <DocIcon type={type} />
+                      <div className="kb-doc-info">
+                        <span className="kb-doc-name" title={doc.filename}>{doc.source_name || doc.filename}</span>
+                        <span className="kb-doc-meta">{doc.chunk_count ?? '—'} chunks</span>
+                      </div>
+                      <StatusDot status={doc.status} />
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ))
-        )}
-      </div>
-
-      {tokenLog && <TokenMeter tokenLog={tokenLog} />}
-
-      <div className="sidebar-footer">
-        <button className="sidebar-add-btn" onClick={() => setShowModal(true)}>
-          <PlusIcon />
-          Add Document
-        </button>
-      </div>
-
-      {currentJob && (
-        <div className="sidebar-job">
-          <div className="sidebar-section-title" style={{ marginBottom: 8 }}>Active Job</div>
-          <div className="job-card">
-            <div className="job-filename">{currentJob.tender_filename || 'tender.pdf'}</div>
-            <div className={`job-status job-status--${currentJob.status}`}>
-              {currentJob.status}
-            </div>
-            {currentJob.score_json?.final_score != null && (
-              <div className="job-score">
-                Score: <strong>{currentJob.score_json.final_score.toFixed(1)}</strong>/100
-              </div>
+              ))
             )}
           </div>
+
+          {tokenLog && <TokenMeter tokenLog={tokenLog} />}
+
+          <div className="sidebar-footer">
+            <button className="sidebar-add-btn" onClick={() => setShowModal(true)}>
+              <PlusIcon />
+              Add Document
+            </button>
+          </div>
+        </>
+      )}
+
+      {collapsed && (
+        <div className="sidebar-collapsed-spacer">
+          {currentJob && currentJob.status !== 'done' && currentJob.status !== 'error' && (
+            <div className="sidebar-collapsed-job-dot" />
+          )}
         </div>
       )}
 
