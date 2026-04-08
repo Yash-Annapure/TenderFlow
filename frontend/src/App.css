@@ -73,17 +73,17 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  animation: borderGlow 3s ease 1.2s infinite;
   transition: border-color 0.2s, background 0.2s, transform 0.15s var(--ease-out-expo, cubic-bezier(0.16,1,0.3,1));
 }
 
-.drop-zone:hover,
-.drop-zone--active {
+.drop-zone:hover {
   border-color: var(--accent);
   background: var(--accent-dim);
 }
 
 .drop-zone--active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
   transform: scale(1.015);
   animation: none;
 }
@@ -201,3 +201,10 @@
 .landing-stagger-3 { animation-delay: 190ms }
 .landing-stagger-4 { animation-delay: 260ms }
 .landing-stagger-5 { animation-delay: 330ms }
+
+/* Drop zone gets both: entrance stagger + idle glow after entrance */
+.drop-zone.landing-stagger-4 {
+  animation:
+    slideInUp var(--dur-slow, 380ms) var(--ease-out-expo, cubic-bezier(0.16,1,0.3,1)) 260ms both,
+    borderGlow 3s ease 1.2s infinite;
+}
