@@ -1,0 +1,8 @@
+{
+  "venvPath": "e:/Github Projects/Q-Hack/TenderFlow/backend",
+  "venv": ".venv",
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "warning",
+  "reportMissingModuleSource": "none"
+}

@@ -1,3 +1,27 @@
 __MACOSX
 .claude
 kb
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+.env
+*.egg-info/
+dist/
+build/
+
+# uv
+.python-version
+
+# App runtime dirs
+backend/uploads/
+backend/outputs/
+backend/checkpoints.db
+backend/checkpoints.db-shm
+backend/checkpoints.db-wal
+
+# OS
+.DS_Store
+Thumbs.db
