@@ -17,7 +17,7 @@ const STEP_DURATION = {
   finalise:         20000,
 }
 
-export default function ChatView({ job, messages, activeToolCall, onReset }) {
+export default function ChatView({ job, messages, activeToolCall, onReset, isHistoryView = false }) {
   const bottomRef = useRef(null)
 
   useEffect(() => {
@@ -35,9 +35,14 @@ export default function ChatView({ job, messages, activeToolCall, onReset }) {
         <div className="chat-topbar-title">
           <FileIcon />
           <span>{job?.tender_filename || 'Tender'}</span>
-          <StatusPill status={job?.status} />
+          {isHistoryView
+            ? <span className="chat-history-badge">History</span>
+            : <StatusPill status={job?.status} />
+          }
         </div>
-        <button className="chat-new-btn" onClick={onReset}>+ New Tender</button>
+        <button className="chat-new-btn" onClick={onReset}>
+          {isHistoryView ? '← Back' : '+ New Tender'}
+        </button>
       </div>
 
       <div className="chat-messages">
@@ -74,7 +79,7 @@ function ToolPipeline({ messages, activeToolCall, job }) {
 
   return (
     <div className="tool-pipeline">
-      {PIPELINE_STEPS.map((step) => {
+      {PIPELINE_STEPS.map((step, index) => {
         const isDone    = doneTools.has(step.key) && activeToolCall !== step.key
         const isActive  = activeToolCall === step.key
         const isPending = !isDone && !isActive
@@ -84,6 +89,7 @@ function ToolPipeline({ messages, activeToolCall, job }) {
           <ToolCard
             key={step.key}
             step={step}
+            index={index}
             isDone={isDone}
             isActive={isActive}
             isPending={isPending}
@@ -97,7 +103,7 @@ function ToolPipeline({ messages, activeToolCall, job }) {
   )
 }
 
-function ToolCard({ step, isDone, isActive, isPending, isOpen, onToggle, job }) {
+function ToolCard({ step, index, isDone, isActive, isPending, isOpen, onToggle, job }) {
   const elapsed = useElapsedTimer(isActive)
 
   let borderColor = 'transparent'
@@ -112,32 +118,34 @@ function ToolCard({ step, isDone, isActive, isPending, isOpen, onToggle, job }) 
         isActive  && 'tool-card--active',
         isPending && 'tool-card--pending',
       ].filter(Boolean).join(' ')}
-      style={{ '--card-border-color': borderColor }}
+      style={{ '--card-border-color': borderColor, animationDelay: `${index * 55}ms` }}
     >
       <div className="tool-card-header" onClick={onToggle}>
         <ToolCardIcon isDone={isDone} isActive={isActive} />
-        <span className="tool-card-name">{step.label}</span>
-        {isActive && (
-          <span className="tool-card-status">
-            {step.desc.split(' ')[0].toLowerCase()}
-            <span className="tool-card-dots">
-              <span style={{ animationDelay: '0ms' }} />
-              <span style={{ animationDelay: '180ms' }} />
-              <span style={{ animationDelay: '360ms' }} />
+        <div className="tool-card-main">
+          <span className="tool-card-name">{step.label}</span>
+          {isActive && (
+            <span className="tool-card-desc">
+              {step.desc}
+              <span className="tool-card-dots">
+                <span style={{ animationDelay: '0ms' }} />
+                <span style={{ animationDelay: '200ms' }} />
+                <span style={{ animationDelay: '400ms' }} />
+              </span>
             </span>
-          </span>
-        )}
-        {isDone && elapsed > 0 && <span className="tool-card-elapsed">{elapsed}s</span>}
-        {isDone && (
-          <span className="tool-card-chevron">{isOpen ? '▾' : '›'}</span>
-        )}
-        {isActive && <span className="tool-card-elapsed tool-card-elapsed--active">{elapsed}s</span>}
+          )}
+        </div>
+        <div className="tool-card-right">
+          {isActive && <span className="tool-card-elapsed tool-card-elapsed--active">{elapsed}s</span>}
+          {isDone && elapsed > 0 && <span className="tool-card-elapsed">{elapsed}s</span>}
+          {isDone && <span className="tool-card-chevron">{isOpen ? '▾' : '›'}</span>}
+        </div>
       </div>
 
       {isActive && (
         <div
           className="tool-card-progress"
-          style={{ '--step-duration': `${STEP_DURATION[step.key]}ms` }}
+          style={{ '--step-duration': `${STEP_DURATION[step.key]}ms`, '--bar-target': '85%' }}
         />
       )}
 
@@ -153,7 +161,7 @@ function ToolCard({ step, isDone, isActive, isPending, isOpen, onToggle, job }) 
 function ToolCardIcon({ isDone, isActive }) {
   if (isDone) return (
     <div className="tool-card-icon tool-card-icon--done">
-      <svg width="9" height="9" viewBox="0 0 12 12" fill="none">
+      <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
         <polyline points="2,6 5,9 10,3" stroke="var(--green)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
     </div>

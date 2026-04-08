@@ -48,6 +48,19 @@
   color: var(--text);
 }
 
+/* ── History badge ──────────────────────────────────────────────────────── */
+.chat-history-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 100px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  color: var(--text-dim);
+}
+
 /* ── Status pills ───────────────────────────────────────────────────────── */
 .status-pill {
   font-size: 10px;
@@ -230,8 +243,8 @@
 /* ── Card states ─────────────────────────────────────────────────────────── */
 .tool-card--pending {
   background: #0f0f0f;
-  border-color: #1a1a1a;
-  opacity: 0.45;
+  border-color: #1e1e1e;
+  opacity: 0.5;
 }
 
 .tool-card--active {
@@ -245,22 +258,42 @@
 /* ── Card header ─────────────────────────────────────────────────────────── */
 .tool-card-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
-  padding: 10px 13px 10px 16px;
+  padding: 11px 14px 11px 14px;
   cursor: default;
 }
 
 .tool-card--done .tool-card-header {
   cursor: pointer;
+  align-items: center;
+}
+
+/* Two-row inner wrapper for name + desc */
+.tool-card-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tool-card-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding-top: 1px;
 }
 
 .tool-card-name {
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--text);
-  font-family: 'Courier New', monospace;
-  flex: 1;
+  font-family: 'SF Mono', ui-monospace, 'Cascadia Code', 'Consolas', 'Monaco', monospace;
+  letter-spacing: 0.015em;
+  line-height: 1.3;
+  -webkit-font-smoothing: antialiased;
 }
 
 .tool-card--pending .tool-card-name {
@@ -268,23 +301,29 @@
   font-weight: 500;
 }
 
-.tool-card-status {
-  font-size: 10px;
-  color: var(--text-dim);
+/* Description sub-line (active state only) */
+.tool-card-desc {
+  font-size: 11px;
+  color: var(--text-muted);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  font-family: var(--font);
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.4;
 }
 
 .tool-card-dots {
   display: inline-flex;
-  gap: 3px;
+  gap: 4px;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .tool-card-dots span {
-  width: 3px;
-  height: 3px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background: var(--accent);
   display: inline-block;
@@ -292,26 +331,28 @@
 }
 
 .tool-card-elapsed {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  font-family: var(--font);
 }
 
 .tool-card-elapsed--active {
   color: var(--accent);
+  font-weight: 500;
 }
 
 .tool-card-chevron {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-dim);
-  margin-left: 2px;
 }
 
 /* ── Card icons ──────────────────────────────────────────────────────────── */
 .tool-card-icon {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -324,20 +365,20 @@
 }
 
 .tool-card-icon--spinner {
-  border: 1.5px solid rgba(99, 102, 241, 0.2);
+  border: 2px solid rgba(99, 102, 241, 0.15);
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spinRing 0.7s linear infinite;
 }
 
 .tool-card-icon--pending {
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
+  background: #161616;
+  border: 1px solid #252525;
 }
 
 /* ── Live progress bar ───────────────────────────────────────────────────── */
 .tool-card-progress {
-  height: 1.5px;
+  height: 2px;
   background: #1a1a1a;
   overflow: hidden;
 }
@@ -346,7 +387,6 @@
   content: '';
   display: block;
   height: 100%;
-  width: 85%;
   background: linear-gradient(90deg, var(--accent), #818cf8);
   animation: barSlide var(--step-duration, 20000ms) var(--ease-in-out, cubic-bezier(0.4,0,0.2,1)) both;
 }

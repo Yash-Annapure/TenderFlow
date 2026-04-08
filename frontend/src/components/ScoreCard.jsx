@@ -47,11 +47,13 @@ export default function ScoreCard({ score, compact = false }) {
   return (
     <div className="score-card">
       <div className="score-card-header">
-        <span>Response Score</span>
-        <div className="score-final-wrap">
+        <div className="score-card-label-row">
+          <span className="score-card-label">Response Score</span>
+          <span className="score-band-pill" style={{ background: BAND_COLOR[b] + '22', color: BAND_COLOR[b] }}>{b}</span>
+        </div>
+        <div className="score-card-value-row">
           <span className="score-big" style={{ color: BAND_COLOR[b] }}>{final.toFixed(1)}</span>
           <span className="score-slash">/100</span>
-          <span className="score-band-pill" style={{ background: BAND_COLOR[b] + '22', color: BAND_COLOR[b] }}>{b}</span>
         </div>
       </div>
 

@@ -71,7 +71,17 @@ function JobStatusCard({ job }) {
   )
 }
 
-export default function Sidebar({ currentJob, tokenLog }) {
+function formatRelTime(date) {
+  const diff = Date.now() - new Date(date).getTime()
+  const m = Math.floor(diff / 60000)
+  if (m < 1)  return 'just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  return `${Math.floor(h / 24)}d ago`
+}
+
+export default function Sidebar({ currentJob, tokenLog, history = [], historyViewId = null, onSelectHistory }) {
   const [docs, setDocs] = useState([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
@@ -154,6 +164,33 @@ export default function Sidebar({ currentJob, tokenLog }) {
         <>
           {currentJob && (
             <JobStatusCard key={currentJob.status} job={currentJob} />
+          )}
+
+          {history.length > 0 && (
+            <>
+              <div className="sidebar-section-title">Recent</div>
+              <div className="sidebar-recent">
+                {history.map(item => (
+                  <button
+                    key={item.id}
+                    className={`sidebar-recent-item${historyViewId === item.id ? ' sidebar-recent-item--active' : ''}`}
+                    onClick={() => onSelectHistory?.(item.id)}
+                  >
+                    <span className="sidebar-recent-name">
+                      {item.job?.tender_filename || 'Tender'}
+                    </span>
+                    <span className="sidebar-recent-meta">
+                      {item.job?.score_json?.final_score != null && (
+                        <span className="sidebar-recent-score">
+                          {item.job.score_json.final_score.toFixed(1)}
+                        </span>
+                      )}
+                      <span className="sidebar-recent-time">{formatRelTime(item.timestamp)}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
           )}
 
           <div className="sidebar-section-title">Knowledge Base</div>

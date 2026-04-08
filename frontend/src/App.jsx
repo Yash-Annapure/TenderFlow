@@ -16,7 +16,14 @@ export default function App() {
   const [activeToolCall, setActiveToolCall] = useState(null)
   const [watchingId,     setWatchingId]     = useState(null)
   const [tokenLog,       setTokenLog]       = useState(emptyLog())
-  const esRef = useRef(null)
+  const [history,        setHistory]        = useState([])   // [{id, job, messages, timestamp}]
+  const [historyViewId,  setHistoryViewId]  = useState(null) // tender_id being viewed
+  const esRef     = useRef(null)
+  // Refs so archive callbacks never close over stale state
+  const jobRef      = useRef(null)
+  const messagesRef = useRef([])
+  useEffect(() => { jobRef.current      = job      }, [job])
+  useEffect(() => { messagesRef.current = messages }, [messages])
 
   const pushMessage = useCallback((msg) => {
     setMessages(prev => [...prev, { id: `${Date.now()}-${Math.random()}`, ...msg }])
@@ -26,13 +33,36 @@ export default function App() {
     setTokenLog(prev => addOps(prev, ops))
   }, [])
 
+  // Upsert current session into history (uses refs to avoid stale closures)
+  const archiveCurrent = useCallback(() => {
+    const j = jobRef.current
+    const m = messagesRef.current
+    if (!j || m.length === 0) return
+    const id = j.tender_id
+    setHistory(prev => {
+      const idx = prev.findIndex(h => h.id === id)
+      const entry = {
+        id,
+        job:       { ...j },
+        messages:  [...m],
+        timestamp: idx >= 0 ? prev[idx].timestamp : new Date(),
+      }
+      if (idx >= 0) {
+        const next = [...prev]; next[idx] = entry; return next
+      }
+      return [entry, ...prev]
+    })
+  }, [])
+
   const handleJobStarted = useCallback((newJob, filename) => {
+    archiveCurrent()           // snapshot previous session before wiping
+    setHistoryViewId(null)     // exit history view if open
     setJob(newJob)
     setTokenLog(emptyLog())
     setMessages([{ id: 'upload', type: 'user', text: `Uploaded tender: ${filename}` }])
     setActiveToolCall(null)
     setWatchingId(newJob.tender_id)
-  }, [])
+  }, [archiveCurrent])
 
   // SSE stream watcher
   useEffect(() => {
@@ -116,19 +146,44 @@ export default function App() {
   }, [pushMessage, job])
 
   const handleReset = useCallback(() => {
+    archiveCurrent()           // snapshot before wiping
     if (esRef.current) { esRef.current.close(); esRef.current = null }
     setJob(null)
     setMessages([])
     setActiveToolCall(null)
     setWatchingId(null)
     setTokenLog(emptyLog())
-  }, [])
+    setHistoryViewId(null)
+  }, [archiveCurrent])
+
+  // Auto-archive when job reaches a terminal pipeline state
+  useEffect(() => {
+    if (job?.status === 'awaiting_review' || job?.status === 'done' || job?.status === 'error') {
+      archiveCurrent()
+    }
+  }, [job?.status]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const historyItem = history.find(h => h.id === historyViewId) ?? null
 
   return (
     <div className="app-layout">
-      <Sidebar currentJob={job} tokenLog={tokenLog} />
+      <Sidebar
+        currentJob={job}
+        tokenLog={tokenLog}
+        history={history}
+        historyViewId={historyViewId}
+        onSelectHistory={setHistoryViewId}
+      />
       <div className="app-main">
-        {!job ? (
+        {historyItem ? (
+          <ChatView
+            job={historyItem.job}
+            messages={historyItem.messages}
+            activeToolCall={null}
+            onReset={() => setHistoryViewId(null)}
+            isHistoryView
+          />
+        ) : !job ? (
           <LandingView onJobStarted={handleJobStarted} />
         ) : job.status === 'awaiting_review' ? (
           <ReviewPanel
