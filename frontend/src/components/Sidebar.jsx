@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { listKBDocuments, ingestDocument, pollIngestStatus } from '../api/client.js'
+import TokenMeter from './TokenMeter'
 import './Sidebar.css'
 
 const DOC_TYPE_LABELS = {
@@ -16,7 +17,7 @@ const DOC_TYPE_COLORS = {
   company_profile: '#f59e0b',
 }
 
-export default function Sidebar({ currentJob }) {
+export default function Sidebar({ currentJob, tokenLog }) {
   const [docs, setDocs] = useState([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
@@ -113,6 +114,8 @@ export default function Sidebar({ currentJob }) {
           ))
         )}
       </div>
+
+      {tokenLog && <TokenMeter tokenLog={tokenLog} />}
 
       <div className="sidebar-footer">
         <button className="sidebar-add-btn" onClick={() => setShowModal(true)}>

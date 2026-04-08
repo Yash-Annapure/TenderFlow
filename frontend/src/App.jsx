@@ -3,26 +3,33 @@ import Sidebar from './components/Sidebar'
 import ChatView from './components/ChatView'
 import ReviewPanel from './components/ReviewPanel'
 import { startTender, openEventStream } from './api/client.js'
+import {
+  emptyLog, addOps,
+  buildPipelineEstimates,
+  buildFinalisationEstimates,
+} from './utils/tokens.js'
 import './App.css'
 
 export default function App() {
-  const [job, setJob] = useState(null)
-  const [messages, setMessages] = useState([])
+  const [job,            setJob]            = useState(null)
+  const [messages,       setMessages]       = useState([])
   const [activeToolCall, setActiveToolCall] = useState(null)
-  const [watchingId, setWatchingId] = useState(null)
+  const [watchingId,     setWatchingId]     = useState(null)
+  const [tokenLog,       setTokenLog]       = useState(emptyLog())
   const esRef = useRef(null)
 
   const pushMessage = useCallback((msg) => {
     setMessages(prev => [...prev, { id: `${Date.now()}-${Math.random()}`, ...msg }])
   }, [])
 
+  const addTokenOps = useCallback((ops) => {
+    setTokenLog(prev => addOps(prev, ops))
+  }, [])
+
   const handleJobStarted = useCallback((newJob, filename) => {
     setJob(newJob)
-    setMessages([{
-      id: 'upload',
-      type: 'user',
-      text: `Uploaded tender: ${filename}`,
-    }])
+    setTokenLog(emptyLog())
+    setMessages([{ id: 'upload', type: 'user', text: `Uploaded tender: ${filename}` }])
     setActiveToolCall(null)
     setWatchingId(newJob.tender_id)
   }, [])
@@ -55,72 +62,50 @@ export default function App() {
           drafting:   'draft_sections',
           finalising: 'finalise',
         }
+        if (toolMap[status]) setActiveToolCall(toolMap[status])
 
-        if (toolMap[status]) {
-          setActiveToolCall(toolMap[status])
+        // Add token estimates on key transitions
+        if (status === 'drafting') {
+          // We now know section count from job state or estimate 4
+          const sectionCount = data.sections_json?.length ?? 4
+          addTokenOps(buildPipelineEstimates(sectionCount))
+        }
+        if (status === 'finalising') {
+          const sectionCount = data.sections_json?.length ?? 4
+          addTokenOps(buildFinalisationEstimates(sectionCount))
         }
 
         const agentMessages = {
-          analysing: {
-            type: 'agent',
-            tool: 'analyse_tender',
-            heading: 'Analyse Tender',
-            text: 'Extracting sections, compliance checklist, and dimension weights from the tender document...',
-          },
-          retrieving: {
-            type: 'agent',
-            tool: 'retrieve_context',
-            heading: 'Retrieve Context',
-            text: 'Embedding queries and searching the knowledge base for relevant chunks per section...',
-          },
-          drafting: {
-            type: 'agent',
-            tool: 'draft_sections',
-            heading: 'Draft Sections',
-            text: 'Drafting response sections with Claude Sonnet. Running compliance & robustness scoring...',
-          },
-          finalising: {
-            type: 'agent',
-            tool: 'finalise',
-            heading: 'Finalise',
-            text: 'Polishing the final document and generating DOCX output...',
-          },
+          analysing:       { type: 'agent', tool: 'analyse_tender',   heading: 'Analyse Tender',   text: 'Extracting sections, compliance checklist, and dimension weights...' },
+          retrieving:      { type: 'agent', tool: 'retrieve_context', heading: 'Retrieve Context', text: 'Embedding queries and searching knowledge base for relevant chunks per section...' },
+          drafting:        { type: 'agent', tool: 'draft_sections',   heading: 'Draft Sections',   text: 'Drafting response sections with Claude Sonnet. Running compliance & robustness scoring...' },
+          finalising:      { type: 'agent', tool: 'finalise',         heading: 'Finalise',         text: 'Polishing the final document and generating DOCX output...' },
           awaiting_review: {
-            type: 'agent-done',
-            heading: 'Draft Complete — Review Required',
-            text: `Tender response drafted. Final score: ${data.score_json?.final_score?.toFixed(1) ?? '—'}/100. Review and edit each section on the left.`,
+            type: 'agent-done', heading: 'Draft Complete — Review Required',
+            text: `Tender response drafted. Final score: ${data.score_json?.final_score?.toFixed(1) ?? '—'}/100. Review and edit each section below.`,
             score: data.score_json,
           },
           done: {
-            type: 'done',
-            heading: 'Tender Response Complete',
+            type: 'done', heading: 'Tender Response Complete',
             text: 'Your tender response has been generated and is ready to download.',
             tenderId: watchingId,
           },
-          error: {
-            type: 'error',
-            text: data.error_msg || 'An error occurred during processing.',
-          },
+          error: { type: 'error', text: data.error_msg || 'An error occurred.' },
         }
 
-        if (agentMessages[status]) {
-          pushMessage(agentMessages[status])
-        }
+        if (agentMessages[status]) pushMessage(agentMessages[status])
 
         if (['awaiting_review', 'done', 'error'].includes(status)) {
           setActiveToolCall(null)
           setWatchingId(null)
         }
       },
-      () => {
-        setActiveToolCall(null)
-        setWatchingId(null)
-      }
+      () => { setActiveToolCall(null); setWatchingId(null) }
     )
 
     esRef.current = es
     return () => { es.close(); esRef.current = null }
-  }, [watchingId, pushMessage])
+  }, [watchingId, pushMessage, addTokenOps])
 
   const handleReviewSubmit = useCallback((updatedJob) => {
     const tid = updatedJob.tender_id ?? job?.tender_id
@@ -136,20 +121,22 @@ export default function App() {
     setMessages([])
     setActiveToolCall(null)
     setWatchingId(null)
+    setTokenLog(emptyLog())
   }, [])
 
   return (
     <div className="app-layout">
-      <Sidebar currentJob={job} />
+      <Sidebar currentJob={job} tokenLog={tokenLog} />
       <div className="app-main">
         {!job ? (
           <LandingView onJobStarted={handleJobStarted} />
         ) : job.status === 'awaiting_review' ? (
           <ReviewPanel
             job={job}
-            messages={messages}
             onSubmit={handleReviewSubmit}
             onReset={handleReset}
+            tokenLog={tokenLog}
+            onTokensAdded={addTokenOps}
           />
         ) : (
           <ChatView
@@ -164,10 +151,12 @@ export default function App() {
   )
 }
 
+/* ─────────────────────────────────────────────────────────────────────────── */
+
 function LandingView({ onJobStarted }) {
-  const [dragging, setDragging] = useState(false)
+  const [dragging,  setDragging]  = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [error, setError] = useState(null)
+  const [error,     setError]     = useState(null)
   const inputRef = useRef(null)
 
   const handleFile = async (file) => {
@@ -205,13 +194,8 @@ function LandingView({ onJobStarted }) {
           onDrop={(e) => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files[0]) }}
           onClick={() => !uploading && inputRef.current?.click()}
         >
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".pdf,.txt,.docx"
-            style={{ display: 'none' }}
-            onChange={(e) => handleFile(e.target.files[0])}
-          />
+          <input ref={inputRef} type="file" accept=".pdf,.txt,.docx" style={{ display: 'none' }}
+            onChange={(e) => handleFile(e.target.files[0])} />
           {uploading ? (
             <div className="drop-zone-content">
               <Spinner size={32} />

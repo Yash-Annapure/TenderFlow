@@ -8,7 +8,7 @@ export default defineConfig({
     proxy: {
       '/tender': 'http://localhost:8000',
       '/ingest': 'http://localhost:8000',
-      '/kb': 'http://localhost:8000',
+      '/kb':     'http://localhost:8000',
       '/health': 'http://localhost:8000',
     },
   },

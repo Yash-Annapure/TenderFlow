@@ -76,3 +76,31 @@ export async function pollIngestStatus(taskId) {
   if (!res.ok) throw new Error(await res.text())
   return res.json()
 }
+
+/**
+ * Re-iterate a single section via the backend's /tender/reiterate-section endpoint.
+ * Uses the backend's already-configured Anthropic client (Haiku, token-optimised).
+ * Returns { text, inputTokens, outputTokens }
+ */
+export async function reiterateSection({ sectionName, requirements, currentDraft, instruction, wordTarget = 500 }) {
+  const res = await fetch('/tender/reiterate-section', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      section_name:  sectionName,
+      requirements:  requirements,
+      current_draft: currentDraft,
+      instruction:   instruction,
+      word_target:   wordTarget,
+    }),
+  })
+
+  if (!res.ok) throw new Error(await res.text())
+
+  const data = await res.json()
+  return {
+    text:         data.text,
+    inputTokens:  data.input_tokens,
+    outputTokens: data.output_tokens,
+  }
+}
