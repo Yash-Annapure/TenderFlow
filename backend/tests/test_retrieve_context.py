@@ -111,3 +111,48 @@ def test_rerank_skipped_when_no_chunks():
     result = _rerank_chunks(mock_client, "Background", ["req"], [])
     mock_client.messages.create.assert_not_called()
     assert result == []
+
+
+def test_rerank_handles_score_count_mismatch():
+    """If Haiku returns wrong number of scores, return original chunks unchanged."""
+    from agents.nodes.retrieve_context import _rerank_chunks
+
+    chunks = [
+        {"chunk_text": "Chunk A", "doc_type": "methodology", "source_name": "A"},
+        {"chunk_text": "Chunk B", "doc_type": "past_tender", "source_name": "B"},
+        {"chunk_text": "Chunk C", "doc_type": "cv", "source_name": "C"},
+    ]
+    mock_client = MagicMock()
+    # Returns only 2 scores for 3 chunks
+    mock_client.messages.create.return_value.content = [MagicMock(text="8,2")]
+
+    result = _rerank_chunks(mock_client, "Background", ["req"], chunks)
+    assert result == chunks  # falls back to original
+
+
+def test_rerank_handles_unparseable_output():
+    """If Haiku returns non-numeric text, return original chunks without crashing."""
+    from agents.nodes.retrieve_context import _rerank_chunks
+
+    chunks = [{"chunk_text": "Some chunk", "doc_type": "cv", "source_name": "X"}]
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value.content = [MagicMock(text="cannot parse this")]
+
+    result = _rerank_chunks(mock_client, "Background", ["req"], chunks)
+    assert result == chunks
+
+
+def test_rerank_retains_originals_when_all_score_below_threshold():
+    """When all chunks score < 5, return original chunks rather than empty list."""
+    from agents.nodes.retrieve_context import _rerank_chunks
+
+    chunks = [
+        {"chunk_text": "Low relevance A", "doc_type": "methodology", "source_name": "A"},
+        {"chunk_text": "Low relevance B", "doc_type": "cv", "source_name": "B"},
+    ]
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value.content = [MagicMock(text="2,1")]
+
+    result = _rerank_chunks(mock_client, "Background", ["req"], chunks)
+    assert len(result) == 2  # returned originals, not empty
+    assert result == chunks

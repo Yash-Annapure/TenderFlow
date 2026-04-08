@@ -20,6 +20,7 @@ Updates TenderState:
 """
 
 import logging
+import re
 
 import anthropic
 
@@ -167,7 +168,7 @@ def _rerank_chunks(
     try:
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=60,
+            max_tokens=150,
             messages=[
                 {
                     "role": "user",
@@ -181,16 +182,26 @@ def _rerank_chunks(
             ],
         )
         scores_text = response.content[0].text.strip()
-        scores = [float(s.strip()) for s in scores_text.split(",")]
+        raw_tokens = re.split(r"[,\s]+", scores_text)
+        scores = [float(t) for t in raw_tokens if t]
 
         if len(scores) != len(chunks):
-            logger.warning(f"[rerank] Score count mismatch ({len(scores)} vs {len(chunks)}), skipping rerank")
+            logger.warning(
+                f"[rerank] Score count mismatch ({len(scores)} vs {len(chunks)}) "
+                f"for '{section_name}', skipping rerank"
+            )
             return chunks
 
         kept = [c for c, s in zip(chunks, scores) if s >= 5.0]
+        if not kept:
+            logger.info(f"[rerank] '{section_name}': all chunks scored <5, retaining originals")
+            return chunks
         logger.debug(f"[rerank] '{section_name}': {len(chunks)} → {len(kept)} chunks after rerank")
-        return kept if kept else chunks  # never return empty if we had chunks
+        return kept
 
+    except (ValueError, IndexError) as e:
+        logger.warning(f"[rerank] Could not parse Haiku scores for '{section_name}': {e!r}")
+        return chunks
     except Exception as e:
         logger.warning(f"[rerank] Haiku call failed for '{section_name}': {e} — using original chunks")
         return chunks
