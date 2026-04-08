@@ -18,13 +18,13 @@ const DOC_TYPE_COLORS = {
 }
 
 const STEP_LABELS = {
-  analysing:       { label: 'analysing' },
-  retrieving:      { label: 'retrieving' },
-  drafting:        { label: 'drafting' },
-  finalising:      { label: 'finalising' },
-  awaiting_review: { label: 'review ready' },
-  done:            { label: 'complete' },
-  error:           { label: 'error' },
+  analysing:       { tool: 'analyse_tender',   label: 'analysing' },
+  retrieving:      { tool: 'retrieve_context', label: 'retrieving' },
+  drafting:        { tool: 'draft_sections',   label: 'drafting' },
+  finalising:      { tool: 'finalise',         label: 'finalising' },
+  awaiting_review: { tool: null,               label: 'review ready' },
+  done:            { tool: null,               label: 'complete' },
+  error:           { tool: null,               label: 'error' },
 }
 
 const STEP_ORDER = ['analysing', 'retrieving', 'drafting', 'finalising']
@@ -153,7 +153,7 @@ export default function Sidebar({ currentJob, tokenLog }) {
       {!collapsed && (
         <>
           {currentJob && (
-            <JobStatusCard job={currentJob} />
+            <JobStatusCard key={currentJob.status} job={currentJob} />
           )}
 
           <div className="sidebar-section-title">Knowledge Base</div>

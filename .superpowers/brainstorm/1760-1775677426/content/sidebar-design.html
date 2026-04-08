@@ -1,0 +1,120 @@
+<h2>Sidebar Redesign — Final Design</h2>
+<p class="subtitle">Left: collapsed state (52px). Right: expanded state (260px). Toggle arrow tab on the right edge.</p>
+
+<style>
+@keyframes glowPulse { 0%,100%{opacity:1;box-shadow:0 0 4px #6366f1aa} 50%{opacity:0.7;box-shadow:0 0 10px #6366f1ee} }
+@keyframes barSlide { from{width:0} to{width:45%} }
+@keyframes stagger1 { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
+@keyframes stagger2 { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
+@keyframes stagger3 { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
+</style>
+
+<div class="split" style="gap:24px;">
+
+  <!-- Collapsed -->
+  <div class="mockup">
+    <div class="mockup-header">Collapsed (52px)</div>
+    <div class="mockup-body" style="padding:0;background:#0d0d0d;display:flex;height:320px;">
+      <div style="width:52px;background:#111111;border-right:1px solid #1e1e1e;display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:0;position:relative;">
+        <!-- Logo mark -->
+        <div style="width:28px;height:28px;background:#6366f1;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;letter-spacing:0.03em;margin-bottom:20px;">TF</div>
+
+        <!-- Icon: KB -->
+        <div style="width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;margin-bottom:6px;" title="Knowledge Base">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#565869" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        </div>
+
+        <!-- Active job dot -->
+        <div style="width:6px;height:6px;border-radius:50%;background:#6366f1;animation:glowPulse 1.5s ease infinite;margin-top:auto;margin-bottom:14px;"></div>
+
+        <!-- Toggle arrow tab — right edge -->
+        <div style="position:absolute;right:-12px;top:50%;transform:translateY(-50%);width:12px;height:36px;background:#1a1a1a;border:1px solid #2a2a2a;border-left:none;border-radius:0 5px 5px 0;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:10;">
+          <span style="font-size:9px;color:#565869;">›</span>
+        </div>
+      </div>
+      <div style="flex:1;background:#0d0d0d;"></div>
+    </div>
+  </div>
+
+  <!-- Expanded -->
+  <div class="mockup">
+    <div class="mockup-header">Expanded (260px)</div>
+    <div class="mockup-body" style="padding:0;background:#0d0d0d;display:flex;height:320px;">
+      <div style="width:260px;background:#111111;border-right:1px solid #1e1e1e;display:flex;flex-direction:column;position:relative;overflow:hidden;">
+
+        <!-- Header -->
+        <div style="padding:16px 14px 12px;border-bottom:1px solid #1e1e1e;display:flex;align-items:center;gap:10px;flex-shrink:0;">
+          <div style="width:26px;height:26px;background:#6366f1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;">TF</div>
+          <span style="font-size:14px;font-weight:600;color:#ececf1;letter-spacing:-0.3px;">TenderFlow</span>
+        </div>
+
+        <!-- Active job card -->
+        <div style="margin:10px 10px 0;background:#161616;border:1px solid #6366f122;border-radius:8px;padding:10px 12px;flex-shrink:0;">
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:6px;">
+            <div style="width:6px;height:6px;border-radius:50%;background:#6366f1;animation:glowPulse 1.5s ease infinite;flex-shrink:0;"></div>
+            <span style="font-size:11px;color:#ececf1;font-weight:500;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">tender-gov-2024.pdf</span>
+          </div>
+          <div style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:#6366f1;margin-bottom:6px;">ANALYSING</div>
+          <div style="height:2px;background:#1e1e1e;border-radius:1px;overflow:hidden;">
+            <div style="height:100%;background:linear-gradient(90deg,#6366f1,#818cf8);border-radius:1px;animation:barSlide 1.2s var(--ease-out-expo,cubic-bezier(0.16,1,0.3,1)) both;"></div>
+          </div>
+        </div>
+
+        <!-- KB section -->
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#333;padding:14px 14px 6px;flex-shrink:0;">Knowledge Base · 3</div>
+
+        <div style="padding:0 8px;display:flex;flex-direction:column;gap:2px;">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;animation:stagger1 0.3s cubic-bezier(0.16,1,0.3,1) 0.05s both;">
+            <div style="width:5px;height:5px;border-radius:50%;background:#10a37f;flex-shrink:0;"></div>
+            <span style="font-size:11px;color:#ececf1;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">company-profile.pdf</span>
+            <span style="font-size:9px;color:#333;">12 chunks</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;animation:stagger2 0.3s cubic-bezier(0.16,1,0.3,1) 0.12s both;">
+            <div style="width:5px;height:5px;border-radius:50%;background:#10a37f;flex-shrink:0;"></div>
+            <span style="font-size:11px;color:#8e8ea0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">past-tenders-2024.docx</span>
+            <span style="font-size:9px;color:#333;">8 chunks</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;animation:stagger3 0.3s cubic-bezier(0.16,1,0.3,1) 0.19s both;">
+            <div style="width:5px;height:5px;border-radius:50%;background:#6366f1;flex-shrink:0;"></div>
+            <span style="font-size:11px;color:#8e8ea0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">pricing-guide.pdf</span>
+            <span style="font-size:9px;color:#333;">5 chunks</span>
+          </div>
+        </div>
+
+        <!-- Token meter teaser -->
+        <div style="margin:10px 10px 0;padding:8px 10px;background:#161616;border:1px solid #1e1e1e;border-radius:6px;flex-shrink:0;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+            <span style="font-size:9px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#333;">Token Usage</span>
+            <span style="font-size:10px;font-weight:700;color:#565869;">$0.031</span>
+          </div>
+          <div style="height:2px;background:#1e1e1e;border-radius:1px;overflow:hidden;">
+            <div style="height:100%;width:28%;background:#6366f1;border-radius:1px;"></div>
+          </div>
+        </div>
+
+        <!-- Toggle arrow tab -->
+        <div style="position:absolute;right:-12px;top:50%;transform:translateY(-50%);width:12px;height:36px;background:#1a1a1a;border:1px solid #2a2a2a;border-left:none;border-radius:0 5px 5px 0;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:10;">
+          <span style="font-size:9px;color:#565869;">‹</span>
+        </div>
+
+        <!-- Footer add button -->
+        <div style="margin-top:auto;padding:10px;border-top:1px solid #1e1e1e;flex-shrink:0;">
+          <div style="width:100%;padding:7px;background:#161616;border:1px solid #2a2a2a;border-radius:6px;text-align:center;font-size:11px;color:#565869;cursor:pointer;">+ Add Document</div>
+        </div>
+      </div>
+      <div style="flex:1;background:#0d0d0d;"></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="section" style="margin-top:16px;">
+  <h3>Behavior notes</h3>
+  <ul style="font-size:13px;color:#aaa;line-height:2;padding-left:20px;">
+    <li>Sidebar width transitions with <code>transition: width 220ms cubic-bezier(0.16,1,0.3,1)</code> — no layout jump</li>
+    <li>KB items stagger in with 70ms delay each on mount</li>
+    <li>Job status bar animates from 0→current% on first render</li>
+    <li>Glowing dot pulses only while a job is active</li>
+    <li>Collapsed state shows logo + KB icon + active dot only</li>
+  </ul>
+</div>

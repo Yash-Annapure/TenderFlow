@@ -1,0 +1,123 @@
+<h2>Tool Call UI — How should agent steps look?</h2>
+<p class="subtitle">All in Precision Dark. These are the cards shown while the agent runs analyse_tender → retrieve_context → draft_sections → finalise.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="timeline" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0d0d0d;padding:20px;font-family:Inter,sans-serif;">
+      <!-- Timeline style -->
+      <div style="display:flex;flex-direction:column;gap:0;">
+
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:0;">
+            <div style="width:20px;height:20px;border-radius:50%;background:#6366f1;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div style="width:1px;height:28px;background:#6366f155;"></div>
+          </div>
+          <div style="padding-bottom:12px;">
+            <div style="font-size:11px;font-weight:600;color:#ececf1;margin-bottom:2px;">analyse_tender</div>
+            <div style="font-size:10px;color:#565869;font-family:'Courier New',monospace;">6 sections · compliance matrix · 0.9s</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:0;">
+            <div style="width:20px;height:20px;border-radius:50%;background:#6366f133;border:1px solid #6366f1;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <div style="width:6px;height:6px;border-radius:50%;background:#6366f1;animation:pulse 1s ease infinite;"></div>
+            </div>
+            <div style="width:1px;height:28px;background:#222;"></div>
+          </div>
+          <div style="padding-bottom:12px;">
+            <div style="font-size:11px;font-weight:600;color:#ececf1;margin-bottom:2px;">retrieve_context <span style="font-size:9px;color:#6366f1;font-weight:400;margin-left:4px;">running</span></div>
+            <div style="font-size:10px;color:#565869;font-family:'Courier New',monospace;">embedding queries · searching kb...</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <div style="display:flex;flex-direction:column;align-items:center;">
+            <div style="width:20px;height:20px;border-radius:50%;background:#1a1a1a;border:1px solid #333;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <div style="width:6px;height:1px;background:#333;"></div>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:500;color:#565869;margin-bottom:2px;">draft_sections</div>
+            <div style="font-size:10px;color:#333;font-family:'Courier New',monospace;">waiting</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Vertical Timeline</h3>
+      <p>Steps flow top-to-bottom with a connecting spine. Completed steps get a filled checkmark circle. Active step pulses. Pending steps are greyed. Clean and reads like a process log.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="expandable" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0d0d0d;padding:20px;font-family:Inter,sans-serif;display:flex;flex-direction:column;gap:6px;">
+      <!-- Expandable cards -->
+      <div style="background:#111;border:1px solid #6366f133;border-radius:8px;overflow:hidden;">
+        <div style="padding:10px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;">
+          <div style="width:5px;height:5px;border-radius:50%;background:#10a37f;flex-shrink:0;"></div>
+          <span style="font-size:11px;font-weight:600;color:#ececf1;flex:1;">analyse_tender</span>
+          <span style="font-size:10px;color:#10a37f;">done · 0.9s</span>
+          <span style="font-size:9px;color:#333;margin-left:4px;">▾</span>
+        </div>
+        <div style="padding:0 14px 10px;border-top:1px solid #1e1e1e;">
+          <div style="font-size:10px;color:#565869;font-family:'Courier New',monospace;line-height:1.8;">
+            → sections: ["Executive Summary", "Technical", "Pricing", "Timeline"]<br/>
+            → compliance_items: 12<br/>
+            → word_targets: {avg: 450}
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#111;border:1px solid #6366f166;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;">
+        <div style="width:14px;height:14px;border:1.5px solid #6366f133;border-top-color:#6366f1;border-radius:50%;animation:none;flex-shrink:0;"></div>
+        <span style="font-size:11px;font-weight:600;color:#ececf1;flex:1;">retrieve_context</span>
+        <span style="font-size:10px;color:#6366f1;">1.4s</span>
+      </div>
+
+      <div style="background:#0f0f0f;border:1px solid #1e1e1e;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;opacity:0.45;">
+        <div style="width:5px;height:5px;border-radius:50%;background:#333;flex-shrink:0;"></div>
+        <span style="font-size:11px;font-weight:500;color:#565869;flex:1;">draft_sections</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Expandable Cards</h3>
+      <p>Each tool is a card. Completed ones expand to show structured output (JSON-like). Active card has a spinner. Clicking a completed card collapses/expands the output log. Very OpenAI-feel.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="terminal" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0a0a0a;padding:16px;font-family:'Courier New',monospace;border-bottom:1px solid #1a1a1a;">
+      <!-- Terminal-style log -->
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;">
+        <div style="width:8px;height:8px;border-radius:50%;background:#ef4444;opacity:0.6;"></div>
+        <div style="width:8px;height:8px;border-radius:50%;background:#f59e0b;opacity:0.6;"></div>
+        <div style="width:8px;height:8px;border-radius:50%;background:#10a37f;opacity:0.6;"></div>
+        <span style="font-size:9px;color:#333;margin-left:4px;">agent · tenderflow</span>
+      </div>
+      <div style="font-size:10px;color:#565869;line-height:1.9;">
+        <span style="color:#6366f1;">▶</span> <span style="color:#ececf1;">analyse_tender</span><br/>
+        &nbsp;&nbsp;<span style="color:#10a37f;">✓</span> sections=6 compliance=12 (0.9s)<br/>
+        <span style="color:#6366f1;">▶</span> <span style="color:#ececf1;">retrieve_context</span><br/>
+        &nbsp;&nbsp;<span style="color:#565869;">↳ embedding 6 queries...</span><br/>
+        &nbsp;&nbsp;<span style="color:#6366f1;animation:blink 1s step-end infinite;">█</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Terminal Log</h3>
+      <p>Feels like a real AI agent running in a shell. Monospace, token-by-token output lines, cursor blink on active step. Nerd-cool, but less immediately readable for non-technical stakeholders.</p>
+    </div>
+  </div>
+
+</div>
+
+<style>
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+</style>
+
+<p class="subtitle" style="margin-top:16px;">Pick the one that feels most "frontier AI product" to you. Can also blend A+B.</p>
