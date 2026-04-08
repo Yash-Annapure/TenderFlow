@@ -11,7 +11,6 @@ import {
 import './App.css'
 
 export default function App() {
-  const [showSplash,     setShowSplash]     = useState(true)
   const [job,            setJob]            = useState(null)
   const [messages,       setMessages]       = useState([])
   const [activeToolCall, setActiveToolCall] = useState(null)
@@ -125,8 +124,6 @@ export default function App() {
     setTokenLog(emptyLog())
   }, [])
 
-  if (showSplash) return <SplashScreen onDone={() => setShowSplash(false)} />
-
   return (
     <div className="app-layout">
       <Sidebar currentJob={job} tokenLog={tokenLog} />
@@ -182,16 +179,16 @@ function LandingView({ onJobStarted }) {
   return (
     <div className="landing">
       <div className="landing-hero">
-        <div className="landing-badge">AI-Powered Tender Agent</div>
-        <h1 className="landing-title">TenderFlow</h1>
-        <p className="landing-sub">
+        <div className="landing-badge landing-stagger-1">AI-Powered Tender Agent</div>
+        <h1 className="landing-title landing-stagger-2">TenderFlow</h1>
+        <p className="landing-sub landing-stagger-3">
           Upload your tender document. The agent analyses structure, retrieves
           knowledge base context, drafts all sections, and prepares a scored
           response — ready for your human review.
         </p>
 
         <div
-          className={`drop-zone ${dragging ? 'drop-zone--active' : ''} ${uploading ? 'drop-zone--uploading' : ''}`}
+          className={`drop-zone landing-stagger-4 ${dragging ? 'drop-zone--active' : ''} ${uploading ? 'drop-zone--uploading' : ''}`}
           onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
           onDragLeave={() => setDragging(false)}
           onDrop={(e) => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files[0]) }}
@@ -215,36 +212,15 @@ function LandingView({ onJobStarted }) {
           )}
         </div>
 
-        {error && <div className="landing-error">{error}</div>}
+        {error && <div className="landing-error landing-stagger-4">{error}</div>}
 
-        <div className="landing-pipeline">
+        <div className="landing-pipeline landing-stagger-5">
           {['analyse_tender', 'retrieve_context', 'draft_sections', 'human_review', 'finalise'].map((step, i) => (
             <div key={step} className="pipeline-step">
               {i > 0 && <div className="pipeline-arrow" />}
               <span className="pipeline-label">{step}</span>
             </div>
           ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function SplashScreen({ onDone }) {
-  useEffect(() => {
-    // Unmount after CSS fade-out finishes (1.55s delay + 0.45s animation = 2s)
-    const t = setTimeout(onDone, 2000)
-    return () => clearTimeout(t)
-  }, [onDone])
-
-  return (
-    <div className="splash">
-      <div className="splash-inner">
-        <div className="splash-logo-mark">TF</div>
-        <h1 className="splash-title">TenderFlow</h1>
-        <p className="splash-tagline">AI-powered tender response agent</p>
-        <div className="splash-bar">
-          <div className="splash-bar-fill" />
         </div>
       </div>
     </div>
