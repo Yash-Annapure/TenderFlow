@@ -75,8 +75,11 @@ def _build_graph() -> StateGraph:
 
 # ── Singleton management ───────────────────────────────────────────────────────
 
+from psycopg_pool import ConnectionPool
+
 _compiled_graph = None
 _checkpointer: PostgresSaver | None = None
+_pool: ConnectionPool | None = None
 
 
 def get_graph():
@@ -84,11 +87,12 @@ def get_graph():
     Return the compiled LangGraph with Supabase checkpointing.
     Safe to call multiple times — initialised once.
     """
-    global _compiled_graph, _checkpointer
+    global _compiled_graph, _checkpointer, _pool
 
     if _compiled_graph is None:
         logger.info("[graph] Initialising LangGraph with PostgresSaver checkpointer")
-        _checkpointer = PostgresSaver.from_conn_string(settings.supabase_db_url)
+        _pool = ConnectionPool(conninfo=settings.supabase_db_url)
+        _checkpointer = PostgresSaver(_pool)
         _checkpointer.setup()  # idempotent — creates checkpoint tables if not present
 
         builder = _build_graph()
