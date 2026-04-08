@@ -1,5 +1,5 @@
 """
-Embedding wrapper using Voyage AI voyage-3-lite (512-dim vectors).
+Embedding wrapper using OpenAI text-embedding-3-small (512-dim vectors).
 
 All KB chunks and retrieval queries go through this module.
 The client is instantiated once and reused — never recreated per call.
@@ -7,18 +7,19 @@ The client is instantiated once and reused — never recreated per call.
 
 import logging
 from functools import lru_cache
-import voyageai
+from openai import OpenAI
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
-EMBEDDING_MODEL = "voyage-3-lite"
-VOYAGE_BATCH_LIMIT = 128  # voyageai hard limit per request
+EMBEDDING_MODEL = "text-embedding-3-small"
+EMBEDDING_DIMS = 512
+OPENAI_BATCH_LIMIT = 512  # max texts per request
 
 
 @lru_cache()
-def _get_client() -> voyageai.Client:
-    return voyageai.Client(api_key=settings.voyage_api_key)
+def _get_client() -> OpenAI:
+    return OpenAI(api_key=settings.openai_api_key)
 
 
 def embed_documents(texts: list[str]) -> list[list[float]]:
@@ -32,29 +33,38 @@ def embed_documents(texts: list[str]) -> list[list[float]]:
     client = _get_client()
     all_embeddings: list[list[float]] = []
 
-    for i in range(0, len(texts), VOYAGE_BATCH_LIMIT):
-        batch = texts[i : i + VOYAGE_BATCH_LIMIT]
-        result = client.embed(batch, model=EMBEDDING_MODEL, input_type="document")
-        all_embeddings.extend(result.embeddings)
-        logger.debug(f"Embedded batch {i // VOYAGE_BATCH_LIMIT + 1}: {len(batch)} chunks")
+    for i in range(0, len(texts), OPENAI_BATCH_LIMIT):
+        batch = texts[i : i + OPENAI_BATCH_LIMIT]
+        response = client.embeddings.create(
+            model=EMBEDDING_MODEL,
+            input=batch,
+            dimensions=EMBEDDING_DIMS,
+        )
+        all_embeddings.extend([item.embedding for item in response.data])
+        logger.debug(f"Embedded batch {i // OPENAI_BATCH_LIMIT + 1}: {len(batch)} chunks")
 
     return all_embeddings
 
 
 def embed_query(query: str) -> list[float]:
-    """
-    Embed a single retrieval query.
-    Uses input_type='query' which voyage optimises differently from documents.
-    """
+    """Embed a single retrieval query."""
     client = _get_client()
-    result = client.embed([query], model=EMBEDDING_MODEL, input_type="query")
-    return result.embeddings[0]
+    response = client.embeddings.create(
+        model=EMBEDDING_MODEL,
+        input=[query],
+        dimensions=EMBEDDING_DIMS,
+    )
+    return response.data[0].embedding
 
 
 def embed_queries(queries: list[str]) -> list[list[float]]:
-    """Embed multiple retrieval queries in one API call to avoid rate limits."""
+    """Embed multiple retrieval queries in one API call."""
     if not queries:
         return []
     client = _get_client()
-    result = client.embed(queries, model=EMBEDDING_MODEL, input_type="query")
-    return result.embeddings
+    response = client.embeddings.create(
+        model=EMBEDDING_MODEL,
+        input=queries,
+        dimensions=EMBEDDING_DIMS,
+    )
+    return [item.embedding for item in response.data]

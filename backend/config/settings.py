@@ -11,8 +11,8 @@ class Settings(BaseSettings):
     # ── Anthropic ─────────────────────────────────────────────────────────────
     anthropic_api_key: str
 
-    # ── Voyage AI ─────────────────────────────────────────────────────────────
-    voyage_api_key: str
+    # ── OpenAI (embeddings) ───────────────────────────────────────────────────
+    openai_api_key: str
 
     # ── Supabase ──────────────────────────────────────────────────────────────
     supabase_url: str

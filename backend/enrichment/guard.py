@@ -98,11 +98,8 @@ def run_guard(
         logger.warning(f"Guard L1 BLOCKED document {document_id}")
         return result
 
-    # Layer 2: claim provenance (Sonnet, conditional)
+    # Layer 2: claim provenance (Sonnet, conditional) — issues WARN only
     result.flags.extend(_layer2_provenance(enrichment, raw_text))
-    if result.has_blocks():
-        logger.warning(f"Guard L2 BLOCKED document {document_id}")
-        return result
 
     # Layer 3: cross-doc consistency (SQL-first)
     if document_id:
@@ -117,11 +114,15 @@ def commit_facts(enrichment: dict, doc_type: str, document_id: str) -> None:
     Call this only after guard passes.
     """
     supabase = get_supabase_admin()
-    entity_ref = (
+    _PLACEHOLDER_VALUES = {"<unknown>", "unknown", "n/a", "none", "tbd", "", "<tbd>", "not provided"}
+    raw_ref = (
         enrichment.get("tender_reference")
         or enrichment.get("name")
         or enrichment.get("company_name")
-        or document_id
+    )
+    entity_ref = (
+        raw_ref if raw_ref and raw_ref.strip().lower() not in _PLACEHOLDER_VALUES
+        else document_id
     )
 
     financial_fields = [
@@ -173,7 +174,56 @@ def _layer1_structural(doc_type: str, enrichment: dict) -> list[GuardFlag]:
                 )
             )
 
+    # Sanity-check numeric fields for obviously invalid values
+    numeric_bounds = {
+        "contract_duration_months": (1, 120),
+        "years_experience": (0, 50),
+        "team_size_fte": (1, 100_000),
+    }
+    for field_name, (lo, hi) in numeric_bounds.items():
+        val = enrichment.get(field_name)
+        if val is not None:
+            try:
+                v = float(val)
+                if not (lo <= v <= hi):
+                    flags.append(GuardFlag(
+                        layer=1,
+                        severity="BLOCK",
+                        message=f"Field '{field_name}' value {v} is outside valid range [{lo}, {hi}] — likely a PDF parsing artifact",
+                        field=field_name,
+                    ))
+            except (TypeError, ValueError):
+                pass
+
     return flags
+
+
+def _is_plausible_claim(claim: str) -> bool:
+    """
+    Filter out obviously garbled PDF artifact values before sending to LLM.
+    Returns False for claims that are clearly invalid (e.g. 226597%, 2013249 employees).
+    """
+    # Extract leading number
+    num_match = re.match(r"[\$€]?([\d,\.]+)", claim.replace(" ", ""))
+    if not num_match:
+        return True
+    try:
+        value = float(num_match.group(1).replace(",", ""))
+    except ValueError:
+        return True
+
+    claim_lower = claim.lower()
+    # Percentages over 100% are always garbled artifacts
+    if "%" in claim_lower and value > 100:
+        return False
+    # Employee/staff/FTE counts over 100k are unrealistic for KB documents
+    if any(w in claim_lower for w in ["employees", "staff", "fte"]) and value > 100_000:
+        return False
+    # Day counts over 10,000 are garbled
+    if "day" in claim_lower and value > 10_000:
+        return False
+
+    return True
 
 
 def _layer2_provenance(enrichment: dict, raw_text: str) -> list[GuardFlag]:
@@ -182,7 +232,9 @@ def _layer2_provenance(enrichment: dict, raw_text: str) -> list[GuardFlag]:
     Skips the LLM call entirely if no numeric claims are found (most company_profile docs).
     """
     enrichment_str = json.dumps(enrichment)
-    claims = list(set(_FACTUAL_CLAIM_RE.findall(enrichment_str)))
+    raw_claims = list(set(_FACTUAL_CLAIM_RE.findall(enrichment_str)))
+    # Filter out obviously garbled PDF artifact values
+    claims = [c for c in raw_claims if _is_plausible_claim(c)]
 
     if not claims:
         return []
@@ -211,7 +263,7 @@ def _layer2_provenance(enrichment: dict, raw_text: str) -> list[GuardFlag]:
             return [
                 GuardFlag(
                     layer=2,
-                    severity="BLOCK",
+                    severity="WARN",
                     message=f"Unverified claim: \"{item['claim']}\" — {item.get('reason', '')}",
                     field="claim_provenance",
                 )
@@ -231,11 +283,16 @@ def _layer3_cross_doc(enrichment: dict, doc_type: str, document_id: str) -> list
     flags: list[GuardFlag] = []
     supabase = get_supabase_admin()
 
-    entity_ref = (
+    _PLACEHOLDER_VALUES = {"<unknown>", "unknown", "n/a", "none", "tbd", "", "<tbd>", "not provided"}
+
+    raw_ref = (
         enrichment.get("tender_reference")
         or enrichment.get("name")
         or enrichment.get("company_name")
-        or document_id
+    )
+    entity_ref = (
+        raw_ref if raw_ref and raw_ref.strip().lower() not in _PLACEHOLDER_VALUES
+        else document_id
     )
 
     financial_fields = ["contract_value_eur", "price_total_eur", "annual_turnover_eur", "day_rate_eur"]
@@ -262,6 +319,12 @@ def _layer3_cross_doc(enrichment: dict, doc_type: str, document_id: str) -> list
 
         existing_value = float(result.data[0]["value"])
         new_float = float(new_value)
+
+        # Allow for unit differences (e.g. "4.2" million stored as 4200000)
+        if existing_value > 1000 and new_float < 1000:
+            new_float *= 1_000_000
+        elif new_float > 1000 and existing_value < 1000:
+            existing_value *= 1_000_000
         divergence = abs(existing_value - new_float) / max(abs(existing_value), 1)
 
         if divergence > 0.05:

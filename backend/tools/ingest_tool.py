@@ -14,6 +14,7 @@ so the FastAPI route can return immediately with a task_id.
 """
 
 import logging
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -256,6 +257,9 @@ def bulk_ingest_kb_directory(
             uploaded_by=uploaded_by,
         )
         results.append(result)
+        # Respect Voyage AI free-tier rate limit (3 RPM = 1 request per 20s)
+        if result.chunks_created > 0:
+            time.sleep(21)
 
     total = len(results)
     committed = sum(1 for r in results if r.status == "committed")
@@ -288,7 +292,10 @@ def _enrich_document(raw_text: str, doc_type: str) -> dict:
                     "role": "user",
                     "content": (
                         f"Extract structured metadata from this {doc_type.replace('_', ' ')} document. "
-                        "Use the provided tool. Omit fields that cannot be determined from the text.\n\n"
+                        "Use the provided tool. IMPORTANT: Only populate numeric fields (amounts, percentages, counts) "
+                        "if the value is explicitly and clearly stated in the document as a clean, readable number. "
+                        "Do NOT extract garbled, corrupted, or concatenated values. "
+                        "Do NOT estimate or infer numeric values. Omit any field you are not certain about.\n\n"
                         f"<document>\n{raw_text[:8000]}\n</document>"
                     ),
                 }
