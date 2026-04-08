@@ -148,7 +148,7 @@ PHASE 3 — OUTPUT
 | Embeddings | voyage-3-lite (Anthropic recommended) | Fast, cheap, semantically dense |
 | Vector store | Supabase pgvector | Single DB for vectors + relational + storage |
 | File storage | Supabase Storage | Raw PDFs accessible for provenance |
-| LLMs | Claude claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5 (model-routed) | Full Anthropic stack |
+| LLMs | claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5-20251001 (model-routed) | Full Anthropic stack |
 | Output | Markdown (.md) | Human-editable, git-versionable, convertible to DOCX/PDF |
 
 ---
@@ -186,7 +186,7 @@ CREATE TABLE chunks (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     document_id     UUID REFERENCES documents(id),
     chunk_text      TEXT NOT NULL,
-    embedding       VECTOR(1024),       -- voyage-3-lite dimension
+    embedding       VECTOR(512),        -- voyage-3-lite dimension
     page_num        INTEGER,
     chunk_index     INTEGER,
     -- Denormalized enrichment fields for fast filtering
