@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>TenderFlow Test UI</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f0f0f0; color: #222; padding: 24px; }
+  h1 { font-size: 22px; margin-bottom: 24px; }
+
+  .step {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .step-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    cursor: pointer;
+    user-select: none;
+    background: #fafafa;
+    border-bottom: 1px solid #eee;
+  }
+  .step-header:hover { background: #f0f0f0; }
+  .step-num {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: #0066cc;
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .step-num.done { background: #28a745; }
+  .step-title { font-weight: 600; font-size: 15px; flex: 1; }
+  .step-status { font-size: 13px; color: #666; }
+  .step-body { padding: 18px; display: none; }
+  .step-body.open { display: block; }
+
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; margin-top: 12px; }
+  label:first-child { margin-top: 0; }
+  input[type=file], input[type=text], select, textarea {
+    width: 100%; padding: 7px 9px;
+    border: 1px solid #ccc; border-radius: 4px;
+    font-size: 14px; font-family: inherit;
+  }
+  textarea { resize: vertical; min-height: 100px; }
+
+  button {
+    margin-top: 14px;
+    padding: 8px 18px;
+    border: none; border-radius: 4px;
+    background: #0066cc; color: #fff;
+    font-size: 14px; cursor: pointer; font-weight: 600;
+  }
+  button:hover { background: #0055aa; }
+  button:disabled { background: #aaa; cursor: not-allowed; }
+  button.secondary {
+    background: #fff; color: #333;
+    border: 1px solid #ccc; margin-left: 8px;
+  }
+  button.secondary:hover { background: #f0f0f0; }
+  button.danger { background: #dc3545; }
+  button.danger:hover { background: #b02a37; }
+
+  .msg { margin-top: 10px; font-size: 13px; padding: 8px 12px; border-radius: 4px; }
+  .msg.info { background: #e8f0fe; color: #1a56db; }
+  .msg.ok { background: #d4edda; color: #155724; }
+  .msg.err { background: #f8d7da; color: #721c24; }
+  .msg.warn { background: #fff3cd; color: #856404; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #eee; }
+  th { background: #f5f5f5; font-weight: 600; }
+
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 11px; font-weight: 700; background: #e0e0e0; color: #444;
+  }
+  .badge.done { background: #d4edda; color: #155724; }
+  .badge.error { background: #f8d7da; color: #721c24; }
+  .badge.awaiting_review { background: #fff3cd; color: #856404; }
+  .badge.analysing, .badge.retrieving, .badge.drafting,
+  .badge.finalising, .badge.pending, .badge.running { background: #cce5ff; color: #004085; }
+
+  .progress {
+    display: flex; gap: 4px; flex-wrap: wrap; margin: 10px 0;
+  }
+  .progress .badge { opacity: 0.3; }
+  .progress .badge.active { opacity: 1; }
+  .progress .badge.passed { opacity: 1; background: #d4edda; color: #155724; }
+
+  .section-card {
+    border: 1px solid #ddd; border-radius: 6px;
+    padding: 14px; margin-bottom: 14px;
+  }
+  .section-card h3 { font-size: 14px; margin-bottom: 4px; }
+  .section-meta { font-size: 12px; color: #666; margin-bottom: 8px; }
+
+  .api-url { font-size: 11px; color: #888; font-family: monospace; margin-bottom: 12px; }
+  #tender-id-display { font-family: monospace; font-size: 12px; color: #444; background: #f5f5f5; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<h1>TenderFlow — Test UI</h1>
+<div class="api-url">Backend: <span id="base-url-label">http://localhost:8000</span></div>
+
+<!-- STEP 1: Ingest KB Document -->
+<div class="step" id="step1">
+  <div class="step-header" onclick="toggle('step1')">
+    <div class="step-num" id="step1-num">1</div>
+    <div class="step-title">Ingest Knowledge Base Document</div>
+    <div class="step-status" id="step1-status">POST /ingest/document</div>
+  </div>
+  <div class="step-body open" id="step1-body">
+    <label>File (PDF / TXT / DOCX)</label>
+    <input type="file" id="ingest-file" accept=".pdf,.txt,.docx" />
+
+    <label>Document Type</label>
+    <select id="ingest-doc-type">
+      <option value="past_tender">past_tender</option>
+      <option value="cv">cv</option>
+      <option value="methodology">methodology</option>
+      <option value="company_profile">company_profile</option>
+    </select>
+
+    <label>Source Name</label>
+    <input type="text" id="ingest-source-name" placeholder="e.g. Acme Corp CV 2024" />
+
+    <div>
+      <button onclick="ingestDoc()">Upload & Ingest</button>
+      <button class="secondary" onclick="loadStep(2)">Skip → Check KB</button>
+    </div>
+    <div id="ingest-msg"></div>
+  </div>
+</div>
+
+<!-- STEP 2: Check KB Documents -->
+<div class="step" id="step2">
+  <div class="step-header" onclick="toggle('step2')">
+    <div class="step-num" id="step2-num">2</div>
+    <div class="step-title">Check Knowledge Base</div>
+    <div class="step-status">GET /kb/documents</div>
+  </div>
+  <div class="step-body" id="step2-body">
+    <button onclick="loadKbDocs()">Refresh Documents</button>
+    <button class="secondary" onclick="loadStep(3)">Continue → Submit Tender</button>
+    <div id="kb-docs-msg"></div>
+    <div id="kb-docs-table"></div>
+  </div>
+</div>
+
+<!-- STEP 3: Submit Tender -->
+<div class="step" id="step3">
+  <div class="step-header" onclick="toggle('step3')">
+    <div class="step-num" id="step3-num">3</div>
+    <div class="step-title">Submit Tender Document</div>
+    <div class="step-status">POST /tender/start</div>
+  </div>
+  <div class="step-body" id="step3-body">
+    <label>Tender PDF</label>
+    <input type="file" id="tender-file" accept=".pdf,.txt" />
+    <div>
+      <button onclick="submitTender()">Start Processing</button>
+    </div>
+    <div id="tender-submit-msg"></div>
+    <div id="tender-id-display" style="display:none"></div>
+  </div>
+</div>
+
+<!-- STEP 4: Poll Status -->
+<div class="step" id="step4">
+  <div class="step-header" onclick="toggle('step4')">
+    <div class="step-num" id="step4-num">4</div>
+    <div class="step-title">Monitor Job Status</div>
+    <div class="step-status">GET /tender/{id}/status</div>
+  </div>
+  <div class="step-body" id="step4-body">
+    <label>Tender ID (auto-filled from Step 3)</label>
+    <input type="text" id="poll-tender-id" placeholder="paste tender_id if needed" />
+    <div>
+      <button onclick="startPolling()">Start Polling</button>
+      <button class="secondary" onclick="stopPolling()">Stop</button>
+    </div>
+    <div id="poll-msg"></div>
+    <div class="progress" id="status-progress"></div>
+    <div id="poll-detail"></div>
+  </div>
+</div>
+
+<!-- STEP 5: HITL Review -->
+<div class="step" id="step5">
+  <div class="step-header" onclick="toggle('step5')">
+    <div class="step-num" id="step5-num">5</div>
+    <div class="step-title">Review & Edit Sections (HITL)</div>
+    <div class="step-status">GET /tender/{id}/review → POST /tender/{id}/submit</div>
+  </div>
+  <div class="step-body" id="step5-body">
+    <label>Tender ID (auto-filled)</label>
+    <input type="text" id="review-tender-id" placeholder="paste tender_id if needed" />
+    <div>
+      <button onclick="loadReview()">Load Review</button>
+    </div>
+    <div id="review-msg"></div>
+    <div id="review-sections"></div>
+    <div id="review-submit-area" style="display:none">
+      <label>Overall Feedback (optional)</label>
+      <input type="text" id="review-feedback" placeholder="Any notes for the agent…" />
+      <div style="margin-top:10px; display:flex; align-items:center; gap:8px;">
+        <input type="checkbox" id="review-another-round" style="width:auto" />
+        <label for="review-another-round" style="margin:0; font-weight:normal">Request another AI revision round</label>
+      </div>
+      <div>
+        <button onclick="submitHITL()">Submit Review</button>
+      </div>
+      <div id="hitl-submit-msg"></div>
+    </div>
+  </div>
+</div>
+
+<!-- STEP 6: Download -->
+<div class="step" id="step6">
+  <div class="step-header" onclick="toggle('step6')">
+    <div class="step-num" id="step6-num">6</div>
+    <div class="step-title">Download Result</div>
+    <div class="step-status">GET /tender/{id}/download</div>
+  </div>
+  <div class="step-body" id="step6-body">
+    <label>Tender ID (auto-filled)</label>
+    <input type="text" id="download-tender-id" placeholder="paste tender_id if needed" />
+    <div>
+      <button onclick="downloadDocx()">Download DOCX</button>
+    </div>
+    <div id="download-msg"></div>
+  </div>
+</div>
+
+<script>
+const BASE = 'http://localhost:8000'
+let currentTenderId = null
+let pollInterval = null
+let reviewSections = []
+
+const STATUS_ORDER = ['pending','analysing','retrieving','drafting','awaiting_review','finalising','done']
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function toggle(stepId) {
+  const body = document.getElementById(stepId + '-body')
+  body.classList.toggle('open')
+}
+
+function openStep(stepId) {
+  document.getElementById(stepId + '-body').classList.add('open')
+}
+
+function loadStep(n) {
+  openStep('step' + n)
+  document.getElementById('step' + n + '-body').scrollIntoView({ behavior: 'smooth' })
+}
+
+function msg(elId, text, type = 'info') {
+  const el = document.getElementById(elId)
+  el.innerHTML = `<div class="msg ${type}">${text}</div>`
+}
+
+function markDone(stepNum) {
+  document.getElementById('step' + stepNum + '-num').classList.add('done')
+  document.getElementById('step' + stepNum + '-num').textContent = '✓'
+}
+
+function setTenderId(id) {
+  currentTenderId = id
+  document.getElementById('poll-tender-id').value = id
+  document.getElementById('review-tender-id').value = id
+  document.getElementById('download-tender-id').value = id
+  const d = document.getElementById('tender-id-display')
+  d.style.display = 'inline-block'
+  d.textContent = 'tender_id: ' + id
+}
+
+function getTenderId(fieldId) {
+  return document.getElementById(fieldId).value.trim() || currentTenderId
+}
+
+// ── Step 1: Ingest ────────────────────────────────────────────────────────────
+
+async function ingestDoc() {
+  const file = document.getElementById('ingest-file').files[0]
+  const docType = document.getElementById('ingest-doc-type').value
+  const sourceName = document.getElementById('ingest-source-name').value.trim()
+
+  if (!file) return msg('ingest-msg', 'Please select a file.', 'err')
+  if (!sourceName) return msg('ingest-msg', 'Please enter a source name.', 'err')
+
+  msg('ingest-msg', 'Uploading…', 'info')
+
+  const form = new FormData()
+  form.append('file', file)
+  form.append('doc_type', docType)
+  form.append('source_name', sourceName)
+  form.append('uploaded_by', 'test-ui')
+
+  try {
+    const res = await fetch(`${BASE}/ingest/document`, { method: 'POST', body: form })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.detail || res.status)
+
+    msg('ingest-msg', `Ingesting "${file.name}"… (task: ${data.task_id})`, 'info')
+    pollIngestStatus(data.task_id)
+  } catch (e) {
+    msg('ingest-msg', 'Error: ' + e.message, 'err')
+  }
+}
+
+function pollIngestStatus(taskId) {
+  const iv = setInterval(async () => {
+    try {
+      const res = await fetch(`${BASE}/ingest/status/${taskId}`)
+      const data = await res.json()
+      if (data.status === 'completed') {
+        clearInterval(iv)
+        markDone(1)
+        msg('ingest-msg', `Done — ${data.chunks_created ?? 0} chunks created. <button class="secondary" style="margin-top:0;padding:4px 10px;font-size:12px" onclick="loadStep(2)">→ Check KB</button>`, 'ok')
+      } else if (data.status === 'error') {
+        clearInterval(iv)
+        msg('ingest-msg', 'Ingest error: ' + (data.error || 'unknown'), 'err')
+      } else {
+        msg('ingest-msg', `Status: ${data.status}…`, 'info')
+      }
+    } catch (e) {
+      clearInterval(iv)
+      msg('ingest-msg', 'Poll error: ' + e.message, 'err')
+    }
+  }, 2000)
+}
+
+// ── Step 2: KB Documents ──────────────────────────────────────────────────────
+
+async function loadKbDocs() {
+  msg('kb-docs-msg', 'Loading…', 'info')
+  try {
+    const res = await fetch(`${BASE}/kb/documents`)
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.detail || res.status)
+
+    const docs = data.documents || []
+    document.getElementById('kb-docs-msg').innerHTML = ''
+
+    if (docs.length === 0) {
+      document.getElementById('kb-docs-table').innerHTML = '<p style="color:#666;font-size:13px;margin-top:10px">No documents yet.</p>'
+      return
+    }
+
+    const rows = docs.map(d => `
+      <tr>
+        <td>${d.source_name}</td>
+        <td>${d.doc_type}</td>
+        <td><span class="badge ${d.status}">${d.status}</span></td>
+        <td>${d.chunk_count ?? '—'}</td>
+        <td>${d.uploaded_at ? new Date(d.uploaded_at).toLocaleDateString() : '—'}</td>
+        <td><button class="danger" style="margin:0;padding:3px 8px;font-size:12px" onclick="deleteDoc('${d.id}')">Delete</button></td>
+      </tr>`).join('')
+
+    document.getElementById('kb-docs-table').innerHTML = `
+      <table>
+        <thead><tr><th>Source</th><th>Type</th><th>Status</th><th>Chunks</th><th>Uploaded</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`
+
+    if (docs.length > 0) markDone(2)
+  } catch (e) {
+    msg('kb-docs-msg', 'Error: ' + e.message, 'err')
+  }
+}
+
+async function deleteDoc(docId) {
+  const adminKey = window.prompt('Enter admin key:')
+  if (!adminKey) return
+  try {
+    const res = await fetch(`${BASE}/kb/${docId}`, {
+      method: 'DELETE',
+      headers: { 'X-Admin-Key': adminKey }
+    })
+    if (!res.ok) {
+      const d = await res.json()
+      throw new Error(d.detail || res.status)
+    }
+    loadKbDocs()
+  } catch (e) {
+    alert('Delete failed: ' + e.message)
+  }
+}
+
+// ── Step 3: Submit Tender ─────────────────────────────────────────────────────
+
+async function submitTender() {
+  const file = document.getElementById('tender-file').files[0]
+  if (!file) return msg('tender-submit-msg', 'Please select a tender PDF.', 'err')
+
+  msg('tender-submit-msg', 'Uploading tender…', 'info')
+
+  const form = new FormData()
+  form.append('file', file)
+
+  try {
+    const res = await fetch(`${BASE}/tender/start`, { method: 'POST', body: form })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.detail || res.status)
+
+    setTenderId(data.tender_id)
+    markDone(3)
+    msg('tender-submit-msg', `Started! tender_id: <code>${data.tender_id}</code> <button class="secondary" style="margin-top:0;padding:4px 10px;font-size:12px" onclick="loadStep(4);startPolling()">→ Poll Status</button>`, 'ok')
+  } catch (e) {
+    msg('tender-submit-msg', 'Error: ' + e.message, 'err')
+  }
+}
+
+// ── Step 4: Poll Status ───────────────────────────────────────────────────────
+
+function startPolling() {
+  stopPolling()
+  const id = getTenderId('poll-tender-id')
+  if (!id) return msg('poll-msg', 'No tender ID. Complete Step 3 first.', 'err')
+  msg('poll-msg', 'Polling every 3s…', 'info')
+  fetchStatus(id)
+  pollInterval = setInterval(() => fetchStatus(id), 3000)
+}
+
+function stopPolling() {
+  if (pollInterval) { clearInterval(pollInterval); pollInterval = null }
+}
+
+async function fetchStatus(id) {
+  try {
+    const res = await fetch(`${BASE}/tender/${id}/status`)
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.detail || res.status)
+
+    renderProgress(data.status)
+
+    let detail = `<div class="msg info" style="margin-top:8px">
+      <strong>Status:</strong> <span class="badge ${data.status}">${data.status}</span>
+      &nbsp; <strong>File:</strong> ${data.tender_filename || '—'}
+      &nbsp; <strong>HITL iter:</strong> ${data.hitl_iteration ?? 0}
+    </div>`
+
+    if (data.error_msg) {
+      detail += `<div class="msg err">Error: ${data.error_msg}</div>`
+    }
+
+    document.getElementById('poll-detail').innerHTML = detail
+
+    if (data.status === 'awaiting_review') {
+      stopPolling()
+      markDone(4)
+      msg('poll-msg', `Awaiting review! <button class="secondary" style="margin-top:0;padding:4px 10px;font-size:12px" onclick="loadStep(5);loadReview()">→ Review Sections</button>`, 'warn')
+    } else if (data.status === 'done') {
+      stopPolling()
+      markDone(4)
+      msg('poll-msg', `Done! <button class="secondary" style="margin-top:0;padding:4px 10px;font-size:12px" onclick="loadStep(6)">→ Download</button>`, 'ok')
+    } else if (data.status === 'error') {
+      stopPolling()
+      msg('poll-msg', 'Job errored. See detail above.', 'err')
+    }
+  } catch (e) {
+    msg('poll-msg', 'Poll error: ' + e.message, 'err')
+    stopPolling()
+  }
+}
+
+function renderProgress(status) {
+  const idx = STATUS_ORDER.indexOf(status)
+  const html = STATUS_ORDER.map((s, i) => {
+    let cls = ''
+    if (i < idx) cls = 'passed'
+    else if (i === idx) cls = 'active'
+    return `<span class="badge ${cls}">${s}</span>`
+  }).join('')
+  document.getElementById('status-progress').innerHTML = html
+}
+
+// ── Step 5: HITL Review ───────────────────────────────────────────────────────
+
+async function loadReview() {
+  const id = getTenderId('review-tender-id')
+  if (!id) return msg('review-msg', 'No tender ID.', 'err')
+
+  msg('review-msg', 'Loading review…', 'info')
+  document.getElementById('review-sections').innerHTML = ''
+  document.getElementById('review-submit-area').style.display = 'none'
+
+  try {
+    const res = await fetch(`${BASE}/tender/${id}/review`)
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.detail || res.status)
+
+    reviewSections = (data.sections || []).map(s => ({ ...s, user_edits: s.draft_text || '' }))
+
+    const scoreHtml = `
+      <div class="msg info">
+        <strong>Final Score:</strong> ${Number(data.final_score || 0).toFixed(1)} &nbsp;
+        <strong>HITL Iteration:</strong> ${data.hitl_iteration}
+      </div>`
+
+    const sectionsHtml = reviewSections.map((s, i) => `
+      <div class="section-card">
+        <h3>${s.section_name || s.section_id}</h3>
+        <div class="section-meta">
+          Confidence: <strong>${s.confidence || '—'}</strong>
+          ${s.gap_flag ? ` &mdash; Gap: ${s.gap_flag}` : ''}
+        </div>
+        <label>Edit draft</label>
+        <textarea id="section-edit-${i}" rows="8" oninput="reviewSections[${i}].user_edits=this.value">${escHtml(s.draft_text || '')}</textarea>
+      </div>`).join('')
+
+    document.getElementById('review-msg').innerHTML = scoreHtml
+    document.getElementById('review-sections').innerHTML = sectionsHtml
+    document.getElementById('review-submit-area').style.display = 'block'
+  } catch (e) {
+    msg('review-msg', 'Error: ' + e.message, 'err')
+  }
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+}
+
+async function submitHITL() {
+  const id = getTenderId('review-tender-id')
+  if (!id) return msg('hitl-submit-msg', 'No tender ID.', 'err')
+
+  const feedback = document.getElementById('review-feedback').value
+  const requestAnother = document.getElementById('review-another-round').checked
+
+  msg('hitl-submit-msg', 'Submitting…', 'info')
+
+  try {
+    const res = await fetch(`${BASE}/tender/${id}/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sections: reviewSections.map(s => ({
+          section_id: s.section_id,
+          user_edits: s.user_edits
+        })),
+        feedback,
+        request_another_round: requestAnother,
+        output_format: 'docx'
+      })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.detail || res.status)
+
+    markDone(5)
+    msg('hitl-submit-msg', `Submitted! Status: ${data.status}. <button class="secondary" style="margin-top:0;padding:4px 10px;font-size:12px" onclick="loadStep(4);startPolling()">→ Poll Status</button>`, 'ok')
+    document.getElementById('review-submit-area').style.display = 'none'
+  } catch (e) {
+    msg('hitl-submit-msg', 'Error: ' + e.message, 'err')
+  }
+}
+
+// ── Step 6: Download ──────────────────────────────────────────────────────────
+
+function downloadDocx() {
+  const id = getTenderId('download-tender-id')
+  if (!id) return msg('download-msg', 'No tender ID.', 'err')
+
+  const url = `${BASE}/tender/${id}/download`
+  msg('download-msg', `Opening <a href="${url}" target="_blank">${url}</a>`, 'ok')
+  window.open(url, '_blank')
+  markDone(6)
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+loadKbDocs()
+</script>
+</body>
+</html>

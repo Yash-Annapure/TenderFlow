@@ -93,7 +93,7 @@ def get_graph():
         logger.info("[graph] Initialising LangGraph with PostgresSaver checkpointer")
         _pool = ConnectionPool(
             conninfo=settings.supabase_db_url,
-            kwargs={"autocommit": True}
+            kwargs={"autocommit": True, "prepare_threshold": None}
         )
         _checkpointer = PostgresSaver(_pool)
         _checkpointer.setup()  # idempotent — creates checkpoint tables if not present
