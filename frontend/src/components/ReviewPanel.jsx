@@ -193,6 +193,11 @@ export default function ReviewPanel({ job, onSubmit, onReset, onTokensAdded, isH
             <button className={`view-toggle-btn ${viewMode === 'split' ? 'active' : ''}`}   onClick={() => setViewMode('split')}>Split</button>
             <button className={`view-toggle-btn ${viewMode === 'preview' ? 'active' : ''}`} onClick={() => setViewMode('preview')}>Preview</button>
           </div>
+          {(!isHistoryView || job?.status === 'done') && (
+            <button className="review-submit-topbar-btn" onClick={handleSubmit} disabled={submitting}>
+              {submitting ? 'Submitting…' : anotherRound ? 'Submit & Revise' : job?.status === 'done' ? 'Re-finalise' : 'Submit & Finalise'}
+            </button>
+          )}
           {job?.status === 'done' && (
             <>
               <a
@@ -215,11 +220,6 @@ export default function ReviewPanel({ job, onSubmit, onReset, onTokensAdded, isH
                 Download PDF
               </button>
             </>
-          )}
-          {(!isHistoryView || job?.status === 'done') && (
-            <button className="review-submit-topbar-btn" onClick={handleSubmit} disabled={submitting}>
-              {submitting ? 'Submitting…' : anotherRound ? 'Submit & Revise' : job?.status === 'done' ? 'Re-finalise' : 'Submit & Finalise'}
-            </button>
           )}
         </div>
 
