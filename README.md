@@ -15,6 +15,7 @@ TenderFlow ingests an incoming tender document (PDF/DOCX), analyses its requirem
 
 <img width="400" height="530" alt="mermaid-diagram" src="https://github.com/user-attachments/assets/6ecb53e7-356b-4935-bcb4-2e393cc4f483" />
 
+---
 
 Every tool node also writes a **checkpoint** to Supabase (PostgresSaver) — the HITL interrupt/resume cycle survives process restarts.
 
