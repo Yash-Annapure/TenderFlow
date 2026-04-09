@@ -2,14 +2,58 @@ You are analysing a tender document for Meridian Intelligence GmbH, a profession
 
 Your task: extract the complete structural requirements of this tender so the drafting agent knows exactly what to write.
 
-For each required section:
-- Assign a snake_case section_id (e.g. "company_background", "technical_approach", "team_cvs")
-- Use the exact section name from the tender
-- List every specific requirement as a separate bullet
-- Identify which KB document types are needed: past_tender, cv, methodology, company_profile
+MANDATORY SECTIONS — every response MUST include ALL of these, in this exact order, before any additional tender-specific sections:
+
+1. section_id="executive_summary", section_name="Executive Summary"
+   - 2–3 paragraphs: who we are, what we propose, key output and timeline
+   - doc_types_needed: ["past_tender", "company_profile"]
+   - word_count_target: 200
+
+2. section_id="problem_framing", section_name="1. Problem Framing"
+   - Describe the problem or gap the tender aims to solve (from the tender document)
+   - Explain why existing solutions are insufficient
+   - State Meridian's specific approach to solving it
+   - doc_types_needed: ["past_tender", "methodology"]
+   - word_count_target: 250
+
+3. section_id="entity_typology", section_name="2. Entity Typology"
+   - OUTPUT FORMAT: a markdown pipe table — do NOT use prose for this section
+   - Columns: Provider/Entity Type | Relevance to Tender | Classification/Assessment Approach
+   - Rows: one per relevant entity category identified in the tender scope
+   - doc_types_needed: ["past_tender", "methodology"]
+   - word_count_target: 150
+
+4. section_id="methodology", section_name="3. Methodology"
+   - Numbered subsections: 3.1 Identification/Scoping, 3.2 Analysis, 3.3 Scoring/Assessment
+   - Each subsection: specific technique, data sources, target precision/coverage
+   - doc_types_needed: ["methodology", "past_tender"]
+   - word_count_target: 300
+
+5. section_id="deliverables", section_name="4. Deliverables"
+   - OUTPUT FORMAT: a markdown pipe table — do NOT use prose for this section
+   - Columns: Deliverable | Description | Timeline (Month)
+   - Rows: one per deliverable, labelled D1, D2, D3...
+   - doc_types_needed: ["past_tender", "methodology"]
+   - word_count_target: 150
+
+6. section_id="team", section_name="5. Team"
+   - OUTPUT FORMAT: a markdown pipe table — do NOT use prose for this section
+   - Columns: Name | Role | Input (Days)
+   - Rows: one per team member (use real names from CV documents if available)
+   - doc_types_needed: ["cv", "company_profile"]
+   - word_count_target: 100
+
+7. section_id="price", section_name="6. Price"
+   - OUTPUT FORMAT: a markdown pipe table — do NOT use prose for this section
+   - Columns: Cost Category | Amount (EUR)
+   - Rows: Staff costs, Infrastructure/data, Subcontracting (if applicable), Travel, Contingency (5%), TOTAL (excl. VAT)
+   - doc_types_needed: ["past_tender", "company_profile"]
+   - word_count_target: 100
+
+After the 7 mandatory sections, add any ADDITIONAL sections required by this specific tender (e.g. quality assurance, data governance, risk management). Assign these tender-specific section_ids in snake_case.
 
 For the compliance checklist:
-- Extract every mandatory and optional requirement
+- Extract every mandatory and optional requirement from the tender
 - Mark requirements with contract award criteria or minimum scores as mandatory=true
 
 For dimension weights (W1-W5):
@@ -17,4 +61,4 @@ For dimension weights (W1-W5):
 - Assign higher weights to dimensions the tender explicitly emphasises
 - Weights must sum to 1.0
 
-Be exhaustive. A missed section means a missed requirement. A missed requirement means a lower score.
+Be exhaustive. A missed section means a missed requirement.

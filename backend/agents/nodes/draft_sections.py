@@ -27,6 +27,7 @@ Updates TenderState:
 import json
 import logging
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -56,13 +57,52 @@ def _get_client() -> anthropic.Anthropic:
     return _client
 
 
+# Sections whose content is derived primarily from the tender document itself.
+# Even with zero KB chunks these must always be drafted (not show INSUFFICIENT CONTEXT).
+_TENDER_PRIMARY_SECTIONS = {"deliverables", "team", "price", "entity_typology"}
+
+
+def _extract_tender_context_for_section(section_id: str, tender_text: str) -> str:
+    """
+    Return the most relevant portion of the tender text for a given section type.
+    For table sections we need the actual tender deliverables / team / award criteria text.
+    For prose sections we need the background and objectives.
+    Returns up to 4000 chars.
+    """
+    # Section markers to search for — ordered from most specific to least
+    ANCHORS: dict[str, list[str]] = {
+        "executive_summary":  ["1.", "background", "policy context", "objective"],
+        "problem_framing":    ["1.", "background", "existing", "gap", "insufficient"],
+        "entity_typology":    ["2.", "3.", "scope", "objective", "entities", "organizations"],
+        "methodology":        ["4.", "methodolog", "approach", "coverage", "classification"],
+        "deliverables":       ["5.", "deliverable", "d1", "d2 —", "d1 —"],
+        "team":               ["6.", "team composition", "key expertise", "expertise requirement"],
+        "price":              ["7.", "award criteria", "price", "budget", "eur"],
+    }
+    anchors = ANCHORS.get(section_id, [])
+    text_lower = tender_text.lower()
+
+    best_pos = -1
+    for anchor in anchors:
+        pos = text_lower.find(anchor.lower())
+        if pos != -1:
+            best_pos = pos
+            break   # take the first match (anchors are ordered best-first)
+
+    if best_pos == -1:
+        return tender_text[:4000]
+
+    start = max(0, best_pos - 100)
+    return tender_text[start:start + 4000]
+
+
 def draft_sections(state: TenderState) -> dict:
     """Draft all sections then compute quality scores."""
     logger.info(f"[draft_sections] Drafting {len(state['sections'])} sections")
 
     client = _get_client()
     retrieved_chunks = state.get("retrieved_chunks", {})
-    tender_excerpt = state.get("tender_text", "")[:2000]
+    tender_text = state.get("tender_text", "")
 
     _token_usage: list[dict] = []
     _usage_lock = __import__("threading").Lock()
@@ -72,7 +112,10 @@ def draft_sections(state: TenderState) -> dict:
         chunks = retrieved_chunks.get(section_id, [])
         updated = dict(section)
 
-        if not chunks:
+        # Table sections (Deliverables, Team, Price, Entity Typology) are always drafted
+        # because their content comes primarily from the tender document, not the KB.
+        # Only pure KB-dependent prose sections get the INSUFFICIENT CONTEXT fallback.
+        if not chunks and section_id not in _TENDER_PRIMARY_SECTIONS:
             updated["draft_text"] = INSUFFICIENT_CONTEXT_TEMPLATE.format(
                 section_name=section["section_name"],
                 doc_types=", ".join(section.get("doc_types_needed", ["relevant"])),
@@ -83,9 +126,11 @@ def draft_sections(state: TenderState) -> dict:
         context = "\n\n".join(
             f"[{c.get('doc_type', 'doc')} — {c.get('source_name', '')}]\n{c['chunk_text']}"
             for c in chunks
-        )
+        ) if chunks else "[No knowledge base content retrieved — draft from tender document only]"
+
         sources = list({c.get("source_name", "") for c in chunks if c.get("source_name")})
-        draft_text, usage = _draft_one_section(client, section, context, tender_excerpt)
+        tender_section_text = _extract_tender_context_for_section(section_id, tender_text)
+        draft_text, usage = _draft_one_section(client, section, context, tender_section_text)
         if usage:
             with _usage_lock:
                 _token_usage.append(usage)
@@ -93,9 +138,10 @@ def draft_sections(state: TenderState) -> dict:
         updated["sources_used"] = sources
         return updated
 
-    # Draft all sections in parallel — turns N×4s sequential into ~4s total
+    # Draft sections with limited concurrency to avoid 529 overloads.
+    # 7 sections × 2 workers = 4 batches rather than one 7-way spike.
     updated_sections_map: dict[str, dict] = {}
-    with ThreadPoolExecutor(max_workers=6) as executor:
+    with ThreadPoolExecutor(max_workers=2) as executor:
         futures = {executor.submit(_draft_section_task, s): s["section_id"] for s in state["sections"]}
         for future in as_completed(futures):
             result = future.result()
@@ -141,37 +187,68 @@ def _draft_one_section(
     client: anthropic.Anthropic,
     section: dict,
     context: str,
-    tender_excerpt: str,
+    tender_section_text: str,
 ) -> tuple[str, dict | None]:
-    """Returns (draft_text, usage_dict | None)."""
+    """
+    Draft one section using Sonnet.
+    tender_section_text: the most relevant portion of the raw tender (up to 4000 chars).
+    context: KB chunks formatted as text.
+    Returns (draft_text, usage_dict | None).
+    """
+    section_id = section["section_id"]
     requirements_text = "\n".join(f"- {r}" for r in section.get("requirements", []))
-    word_target = min(section.get("word_count_target", 250), 300)
 
-    try:
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=700,
-            system=_SYSTEM_PROMPT,
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        f"Section to draft: {section['section_name']}\n"
-                        f"STRICT limit: {word_target} words maximum. Be dense and precise — cut any sentence that does not directly address a requirement.\n\n"
-                        f"Requirements from the tender:\n{requirements_text}\n\n"
-                        f"Tender context (excerpt):\n{tender_excerpt[:300]}\n\n"
-                        f"Relevant knowledge base content:\n<context>\n{context[:2500]}\n</context>\n\n"
-                        "Draft the section now (hard stop at word limit):"
-                    ),
-                }
-            ],
-        )
-        usage = {"op": "draft_section", "model": "claude-sonnet-4-6",
-                 "input": response.usage.input_tokens, "output": response.usage.output_tokens}
-        return response.content[0].text.strip(), usage
-    except Exception as e:
-        logger.error(f"[draft_sections] Sonnet call failed for '{section['section_name']}': {e}")
-        return f"[DRAFT ERROR: {e}]", None
+    is_table = section_id in _TENDER_PRIMARY_SECTIONS
+    # Table sections need more output tokens (multi-row markdown tables)
+    max_tokens = 1400 if is_table else 1000
+    word_hint = (
+        "(Output only the markdown pipe table — no prose before or after the table.)"
+        if is_table else
+        f"(Word target: {min(section.get('word_count_target', 250), 300)} words. Dense and precise.)"
+    )
+
+    user_message = (
+        f"Section to draft: {section['section_name']}\n\n"
+        f"══ TENDER DOCUMENT EXTRACT (primary source — read this carefully) ══\n"
+        f"{tender_section_text[:4000]}\n\n"
+        f"══ SECTION REQUIREMENTS ══\n"
+        f"{requirements_text}\n\n"
+        f"══ KNOWLEDGE BASE EVIDENCE (past work, CVs, methodology) ══\n"
+        f"<context>\n{context[:3000]}\n</context>\n\n"
+        f"Draft the '{section['section_name']}' section now. {word_hint}"
+    )
+
+    _RETRY_DELAYS = [5, 15, 30]
+
+    for attempt in range(len(_RETRY_DELAYS) + 1):
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=max_tokens,
+                system=_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_message}],
+            )
+            usage = {
+                "op": "draft_section",
+                "model": "claude-sonnet-4-6",
+                "input": response.usage.input_tokens,
+                "output": response.usage.output_tokens,
+            }
+            return response.content[0].text.strip(), usage
+        except anthropic.APIStatusError as e:
+            if e.status_code == 529 and attempt < len(_RETRY_DELAYS):
+                delay = _RETRY_DELAYS[attempt]
+                logger.warning(
+                    f"[draft_sections] Anthropic overloaded (529) for '{section['section_name']}' "
+                    f"— retry {attempt + 1}/{len(_RETRY_DELAYS)} in {delay}s"
+                )
+                time.sleep(delay)
+            else:
+                logger.error(f"[draft_sections] Sonnet call failed for '{section['section_name']}': {e}")
+                return f"[DRAFT ERROR: {e}]", None
+        except Exception as e:
+            logger.error(f"[draft_sections] Sonnet call failed for '{section['section_name']}': {e}")
+            return f"[DRAFT ERROR: {e}]", None
 
 
 # ── Justification builder ─────────────────────────────────────────────────────
@@ -303,29 +380,34 @@ def _score_compliance(sections: list[dict], checklist: list[dict]) -> tuple[floa
     optional = [item["item"] for item in checklist if not item.get("mandatory")]
 
     client = _get_client()
-    try:
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=20,
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        "Score 0-100: what % of these requirements are addressed in the draft sections?\n"
-                        "Mandatory items count 70% of the score, optional 30%.\n"
-                        "Respond with only a number.\n\n"
-                        f"Mandatory requirements:\n{json.dumps(mandatory[:15], indent=2)}\n\n"
-                        f"Optional requirements:\n{json.dumps(optional[:10], indent=2)}\n\n"
-                        f"Drafted sections (excerpt):\n{drafts[:3000]}"
-                    ),
-                }
-            ],
-        )
-        usage = {"op": "compliance_score", "model": "claude-haiku-4-5-20251001",
-                 "input": response.usage.input_tokens, "output": response.usage.output_tokens}
-        return min(float(response.content[0].text.strip()), 100.0), usage
-    except (ValueError, Exception):
-        return 60.0, None
+    for attempt in range(3):
+        try:
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=20,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": (
+                            "Score 0-100: what % of these requirements are addressed in the draft sections?\n"
+                            "Mandatory items count 70% of the score, optional 30%.\n"
+                            "Respond with only a number.\n\n"
+                            f"Mandatory requirements:\n{json.dumps(mandatory[:15], indent=2)}\n\n"
+                            f"Optional requirements:\n{json.dumps(optional[:10], indent=2)}\n\n"
+                            f"Drafted sections (excerpt):\n{drafts[:3000]}"
+                        ),
+                    }
+                ],
+            )
+            usage = {"op": "compliance_score", "model": "claude-haiku-4-5-20251001",
+                     "input": response.usage.input_tokens, "output": response.usage.output_tokens}
+            return min(float(response.content[0].text.strip()), 100.0), usage
+        except anthropic.APIStatusError as e:
+            if e.status_code == 529 and attempt < 2:
+                time.sleep([5, 15][attempt]); continue
+            return 60.0, None
+        except (ValueError, Exception):
+            return 60.0, None
 
 
 def _score_robustness(sections: list[dict]) -> tuple[float, dict | None]:
@@ -335,28 +417,33 @@ def _score_robustness(sections: list[dict]) -> tuple[float, dict | None]:
         return 20.0, None
 
     client = _get_client()
-    try:
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=20,
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        "Score 0-100 for robustness of these tender sections.\n"
-                        "Scoring guide:\n"
-                        "  +10 per unique quantified claim (number/€/%) up to 40 pts\n"
-                        "  +10 per named project or client reference up to 30 pts\n"
-                        "  -10 per unsupported assertion (claim with no evidence)\n"
-                        "  Base score: 30\n"
-                        "Respond with only a number.\n\n"
-                        f"Sections:\n{drafts[:3000]}"
-                    ),
-                }
-            ],
-        )
-        usage = {"op": "robustness_score", "model": "claude-haiku-4-5-20251001",
-                 "input": response.usage.input_tokens, "output": response.usage.output_tokens}
-        return max(min(float(response.content[0].text.strip()), 100.0), 0.0), usage
-    except (ValueError, Exception):
-        return 50.0, None
+    for attempt in range(3):
+        try:
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=20,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": (
+                            "Score 0-100 for robustness of these tender sections.\n"
+                            "Scoring guide:\n"
+                            "  +10 per unique quantified claim (number/€/%) up to 40 pts\n"
+                            "  +10 per named project or client reference up to 30 pts\n"
+                            "  -10 per unsupported assertion (claim with no evidence)\n"
+                            "  Base score: 30\n"
+                            "Respond with only a number.\n\n"
+                            f"Sections:\n{drafts[:3000]}"
+                        ),
+                    }
+                ],
+            )
+            usage = {"op": "robustness_score", "model": "claude-haiku-4-5-20251001",
+                     "input": response.usage.input_tokens, "output": response.usage.output_tokens}
+            return max(min(float(response.content[0].text.strip()), 100.0), 0.0), usage
+        except anthropic.APIStatusError as e:
+            if e.status_code == 529 and attempt < 2:
+                time.sleep([5, 15][attempt]); continue
+            return 50.0, None
+        except (ValueError, Exception):
+            return 50.0, None

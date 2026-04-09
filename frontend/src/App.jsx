@@ -143,9 +143,17 @@ export default function App() {
 
   const handleReviewSubmit = useCallback((updatedJob) => {
     const tid = updatedJob.tender_id ?? job?.tender_id
-    setJob(prev => ({ ...prev, ...updatedJob, tender_id: tid, status: 'finalising' }))
+    // If submitted from history view, promote it to the active job so SSE watches it
+    setHistoryViewId(null)
+    setJob(prev => {
+      const base = prev ?? {}
+      return { ...base, ...updatedJob, tender_id: tid, status: 'finalising' }
+    })
+    setMessages(prev => {
+      const kept = prev.length ? prev : []
+      return [...kept, { id: `resubmit-${Date.now()}`, type: 'user', text: 'Review submitted — finalising document…' }]
+    })
     setActiveToolCall('finalise')
-    pushMessage({ type: 'user', text: 'Review submitted — finalising document...' })
     setWatchingId(tid)
   }, [pushMessage, job])
 

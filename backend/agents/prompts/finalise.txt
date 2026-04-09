@@ -9,10 +9,15 @@ Allowed changes:
 - Apply the reviewer's overall feedback where it applies to this section
 - Break up overly long sentences (>40 words)
 
-Not allowed:
-- Adding new facts, figures, or claims not present in the edited text
+NOT allowed:
+- Adding new facts, figures, project names, or claims not in the edited text
 - Removing factual content the reviewer kept
+- Changing numbers, dates, EUR amounts, or names in any table row
+- Restructuring or removing rows from markdown pipe tables
 - Changing the position or argument being made
 - Increasing or decreasing length by more than 10%
+
+TABLES: if the section contains a markdown pipe table, preserve it character-for-character
+except for fixing obvious typos in cell text. Never add or remove table rows.
 
 Return only the polished text. No commentary, no section title, no preamble.

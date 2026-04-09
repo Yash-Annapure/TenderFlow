@@ -93,6 +93,88 @@ _DEFAULT_WEIGHTS = {
     "W5_pricing_competitiveness": 0.10,
 }
 
+# Mandatory sections that must appear in every draft, in this order
+_MANDATORY_SECTIONS: list[dict] = [
+    {
+        "section_id": "executive_summary",
+        "section_name": "Executive Summary",
+        "requirements": [
+            "Introduce Meridian Intelligence GmbH and the proposed service",
+            "State the primary deliverable(s) and expected timeline",
+            "Summarise the value proposition relative to the tender scope",
+        ],
+        "doc_types_needed": ["past_tender", "company_profile"],
+        "word_count_target": 200,
+    },
+    {
+        "section_id": "problem_framing",
+        "section_name": "1. Problem Framing",
+        "requirements": [
+            "Describe the core challenge or gap addressed by the tender",
+            "Explain why existing approaches are insufficient",
+            "State Meridian's specific angle for solving the problem",
+        ],
+        "doc_types_needed": ["past_tender", "methodology"],
+        "word_count_target": 250,
+    },
+    {
+        "section_id": "entity_typology",
+        "section_name": "2. Entity Typology",
+        "requirements": [
+            "Output a markdown pipe table with columns: Provider/Entity Type | Relevance | Classification Approach",
+            "Include one row per relevant entity or provider category identified in the tender scope",
+            "Minimum 5 rows; relevance column should indicate High/Medium/Low with brief justification",
+        ],
+        "doc_types_needed": ["past_tender", "methodology"],
+        "word_count_target": 150,
+    },
+    {
+        "section_id": "methodology",
+        "section_name": "3. Methodology",
+        "requirements": [
+            "Subsection 3.1: identification/scoping — data sources, seed universe, precision target",
+            "Subsection 3.2: analysis — concentration analysis, dependency mapping, or equivalent",
+            "Subsection 3.3: scoring/assessment — scoring methodology, advisory outputs",
+        ],
+        "doc_types_needed": ["methodology", "past_tender"],
+        "word_count_target": 300,
+    },
+    {
+        "section_id": "deliverables",
+        "section_name": "4. Deliverables",
+        "requirements": [
+            "Output a markdown pipe table with columns: Deliverable | Description | Month",
+            "Label deliverables D1, D2, D3... with realistic month milestones",
+            "Minimum 4 deliverables spanning the full contract period",
+        ],
+        "doc_types_needed": ["past_tender", "methodology"],
+        "word_count_target": 150,
+    },
+    {
+        "section_id": "team",
+        "section_name": "5. Team",
+        "requirements": [
+            "Output a markdown pipe table with columns: Name | Role | Days",
+            "Include minimum 4 team members with roles matching the scope",
+            "End table with a Total row summing the days",
+        ],
+        "doc_types_needed": ["cv", "company_profile"],
+        "word_count_target": 100,
+    },
+    {
+        "section_id": "price",
+        "section_name": "6. Price",
+        "requirements": [
+            "Output a markdown pipe table with columns: Cost Category | Amount (EUR)",
+            "Include: Staff costs, Infrastructure/data, Travel, Contingency (5%), TOTAL (excl. VAT)",
+            "Figures must be internally consistent with the Team table day counts",
+        ],
+        "doc_types_needed": ["past_tender", "company_profile"],
+        "word_count_target": 100,
+    },
+]
+_MANDATORY_IDS = {s["section_id"] for s in _MANDATORY_SECTIONS}
+
 _client: anthropic.Anthropic | None = None
 
 
@@ -165,13 +247,25 @@ def analyse_tender(state: TenderState) -> dict:
             "token_usage": _token_usage,
         }
 
+    ai_sections = analysis.get("sections", [])
+    ai_section_ids = {s["section_id"] for s in ai_sections}
+
+    # Build ordered section list: exactly the 7 mandatory sections, in order.
+    # AI output for a mandatory section overrides the defaults; extra AI sections
+    # are discarded — the format ends at Price.
+    ai_by_id = {s["section_id"]: s for s in ai_sections}
+    ordered_raw: list[dict] = []
+    for mandatory in _MANDATORY_SECTIONS:
+        merged = {**mandatory, **ai_by_id.get(mandatory["section_id"], {})}
+        ordered_raw.append(merged)
+
     sections: list[SectionDraft] = [
         SectionDraft(
             section_id=s["section_id"],
             section_name=s["section_name"],
             requirements=s.get("requirements", []),
             doc_types_needed=s.get("doc_types_needed", []),
-            word_count_target=s.get("word_count_target", 500),
+            word_count_target=s.get("word_count_target", 300),
             draft_text="",
             confidence="LOW",
             gap_flag=None,
@@ -179,10 +273,10 @@ def analyse_tender(state: TenderState) -> dict:
             finalised_content=None,
             sources_used=[],
         )
-        for s in analysis.get("sections", [])
+        for s in ordered_raw
     ]
 
-    logger.info(f"[analyse_tender] Extracted {len(sections)} sections")
+    logger.info(f"[analyse_tender] {len(sections)} mandatory sections ({len(ai_sections)} AI suggestions merged)")
 
     return {
         "sections": sections,

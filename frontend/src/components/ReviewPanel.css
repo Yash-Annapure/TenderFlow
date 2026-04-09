@@ -104,6 +104,23 @@
   animation: expandDown var(--dur-base, 220ms) var(--ease-out-expo, cubic-bezier(0.16,1,0.3,1)) both;
 }
 
+.review-nav-add-btn {
+  width: 100%; margin-top: 6px; padding: 7px 10px;
+  background: transparent; border: 1px dashed var(--border);
+  border-radius: var(--radius); color: var(--text-muted);
+  font-size: 12px; cursor: pointer; text-align: left;
+  transition: background 0.15s, color 0.15s;
+}
+.review-nav-add-btn:hover { background: var(--surface-hover); color: var(--text); }
+
+.section-name-input {
+  width: 100%; padding: 8px 10px; margin-bottom: 12px;
+  background: var(--surface); border: 1px solid var(--accent);
+  border-radius: var(--radius); color: var(--text);
+  font-size: 14px; font-weight: 600;
+}
+.section-name-input:focus { outline: none; border-color: var(--accent); }
+
 .review-nav-name {
   flex: 1; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
@@ -337,8 +354,15 @@
 }
 
 .reiterate-actions {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
+
+.reiterate-append-toggle {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 12px; color: var(--text-muted); cursor: pointer;
+  user-select: none;
+}
+.reiterate-append-toggle input { cursor: pointer; }
 
 .reiterate-model-badge {
   font-size: 10px; color: var(--text-dim);

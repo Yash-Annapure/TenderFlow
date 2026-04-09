@@ -44,7 +44,6 @@ export default function DocxPreview({ sections = [], filename = 'Tender Response
                 className={`docx-section ${activeSectionId === s.section_id ? 'docx-section--active' : ''}`}
               >
                 <h2 className="docx-section-heading">
-                  <span className="docx-section-num">{idx + 1}.</span>
                   {s.section_name}
                 </h2>
                 <div

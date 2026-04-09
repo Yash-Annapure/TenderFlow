@@ -6,7 +6,9 @@ from pydantic import BaseModel
 
 class SectionEdit(BaseModel):
     section_id: str
-    user_edits: str  # Empty string = "no changes, keep AI draft"
+    user_edits: str = ""          # Empty string = "no changes, keep AI draft"
+    section_name: Optional[str] = None   # Required for brand-new sections
+    requirements: Optional[list[str]] = None  # For brand-new sections
 
 
 class HITLSubmitRequest(BaseModel):

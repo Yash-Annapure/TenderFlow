@@ -1,15 +1,30 @@
 """
 Node: retrieve_context
 
-For each section, calls the retrieval tool with a doc_type filter, then
-computes the Primary Score (Modules 1-5).
+Retrieval strategy (revised for fixed 7-section format):
 
-Module breakdown:
-  M1 Track Record        — count of past_tender chunks retrieved (SQL proxy)
-  M2 Expertise Depth     — % of doc_types_needed covered by retrieved chunks
-  M3 Methodology Fit     — Haiku quality assessment (~400 tokens)
-  M4 Delivery Credibility — CV chunk coverage
-  M5 Pricing             — neutral 70 when pricing data unavailable
+The 7 mandatory response sections are structural templates, not tender topics.
+A query of "Executive Summary: Introduce Meridian..." finds nothing in the KB.
+Instead retrieval is driven by:
+
+  1. Tender-context extraction  — one Haiku call extracts the domain, contracting
+     authority, key regulations/topics, and required skills from the raw tender text.
+
+  2. Per-section query templates — each section_id has its own pair of query
+     templates that describe *what KB content feeds that section*, parameterised
+     with the extracted tender context.
+
+  3. Multi-angle retrieval + merge — two queries per section are embedded in one
+     batch call, each query retrieves independently, results are merged and
+     deduplicated by chunk identity keeping the higher similarity score.
+
+  4. Three-tier fallback
+       Tier-1  narrow doc_type + primary threshold
+       Tier-2  all doc_types, lower threshold (0.35)
+       Tier-3  HyDE — Haiku generates a hypothetical KB passage for re-embedding
+
+  5. Haiku rerank — scores each candidate chunk 0-10 against section requirements
+     plus the extracted tender domain for precision.
 
 Updates TenderState:
   - retrieved_chunks      (section_id → list of chunk dicts)
@@ -21,6 +36,7 @@ Updates TenderState:
 
 import logging
 import re
+import time
 
 import anthropic
 
@@ -41,98 +57,203 @@ def _get_client() -> anthropic.Anthropic:
     return _client
 
 
+# ── Per-section query templates ────────────────────────────────────────────────
+# Each section has two query angles:
+#   q1 — primary KB focus (matches the dominant doc_type for that section)
+#   q2 — secondary angle (broader or domain-enriched)
+# Placeholders: {domain} {authority} {keywords} {skills} {deliverables}
+
+_SECTION_QUERY_TEMPLATES: dict[str, list[str]] = {
+    "executive_summary": [
+        "{domain} past project track record deliverables {authority}",
+        "company capabilities overview {keywords} EU institutional proposal",
+    ],
+    "problem_framing": [
+        "{domain} problem analysis regulatory gap research approach",
+        "{keywords} identification challenge market mapping EU policy",
+    ],
+    "entity_typology": [
+        "{domain} entity classification typology framework {keywords}",
+        "{domain} provider categories sector taxonomy classification approach",
+    ],
+    "methodology": [
+        "{domain} methodology data pipeline analytical framework {keywords}",
+        "{keywords} identification scoring research method quantitative",
+    ],
+    "deliverables": [
+        "{domain} project deliverables dataset report milestones {authority}",
+        "{keywords} output work plan timeline EU institutional contract",
+    ],
+    "team": [
+        "{skills} expert consultant team {domain}",
+        "CV analyst data scientist regulatory specialist {domain}",
+    ],
+    "price": [
+        "budget cost estimate {domain} EU tender staff days pricing",
+        "cost breakdown infrastructure data consultancy {keywords} proposal",
+    ],
+}
+
+# Fallback for any section_id not in the table above
+_DEFAULT_QUERY_TEMPLATES = [
+    "{domain} {keywords} EU institutional tender",
+    "{domain} methodology deliverables {authority}",
+]
+
+
+def _fill_template(template: str, ctx: dict) -> str:
+    """Substitute context placeholders in a query template."""
+    return (
+        template
+        .replace("{domain}", ctx.get("domain", ""))
+        .replace("{authority}", ctx.get("authority", ""))
+        .replace("{keywords}", " ".join(ctx.get("keywords", [])[:5]))
+        .replace("{skills}", " ".join(ctx.get("skills", [])[:4]))
+        .replace("{deliverables}", " ".join(ctx.get("deliverables", [])[:3]))
+        .strip()
+    )
+
+
+def _build_section_queries(section: dict, tender_ctx: dict) -> list[str]:
+    """Return 2 retrieval queries for a section, grounded in the tender context."""
+    templates = _SECTION_QUERY_TEMPLATES.get(
+        section["section_id"], _DEFAULT_QUERY_TEMPLATES
+    )
+    queries = [_fill_template(t, tender_ctx) for t in templates]
+
+    # Append requirements as a third query so specific tender asks are covered
+    reqs = " | ".join((section.get("requirements") or [])[:3])
+    if reqs:
+        queries.append(
+            f"{tender_ctx.get('domain', '')} {tender_ctx.get('authority', '')} {reqs}"[:300]
+        )
+
+    return queries
+
+
+# ── Main node ──────────────────────────────────────────────────────────────────
+
 def retrieve_context(state: TenderState) -> dict:
     """Retrieve KB chunks per section and compute primary scoring modules."""
     logger.info(f"[retrieve_context] {len(state['sections'])} sections to retrieve")
 
-    retrieved_chunks: dict[str, list[dict]] = {}
+    tender_text = state.get("tender_text") or ""
+    client = _get_client()
     _token_usage: list[dict] = []
 
-    tender_excerpt = state.get("tender_text") or ""
-    queries = [_build_section_query(s, tender_excerpt) for s in state["sections"]]
+    # Step 1 ── extract tender domain context (1 Haiku call ~150 tokens)
+    tender_ctx, ctx_usage = _extract_tender_context(client, tender_text)
+    if ctx_usage:
+        _token_usage.append(ctx_usage)
+    logger.info(
+        f"[retrieve_context] Tender context: domain='{tender_ctx['domain']}' "
+        f"authority='{tender_ctx['authority']}' keywords={tender_ctx['keywords']}"
+    )
 
-    # Single batch call — all sections embedded together
-    query_embeddings = embed_queries(queries)
+    # Step 2 ── build per-section query lists
+    section_queries: dict[str, list[str]] = {}
+    for section in state["sections"]:
+        section_queries[section["section_id"]] = _build_section_queries(section, tender_ctx)
 
-    client = _get_client()
+    # Step 3 ── batch embed ALL queries in one API call
+    all_query_texts: list[str] = []
+    query_spans: dict[str, tuple[int, int]] = {}
+    for sid, queries in section_queries.items():
+        start = len(all_query_texts)
+        all_query_texts.extend(queries)
+        query_spans[sid] = (start, start + len(queries))
 
-    for i, section in enumerate(state["sections"]):
-        section_id = section["section_id"]
+    all_embeddings = embed_queries(all_query_texts)
+
+    # Step 4 ── multi-angle retrieval + merge per section
+    retrieved_chunks: dict[str, list[dict]] = {}
+
+    for section in state["sections"]:
+        sid = section["section_id"]
         doc_types = section.get("doc_types_needed") or None
+        start, end = query_spans[sid]
+        queries = all_query_texts[start:end]
+        embeddings = all_embeddings[start:end]
 
-        chunks = retrieve_chunks(
-            query=queries[i],
-            doc_types=doc_types,
-            threshold=settings.retrieval_threshold,
-            query_embedding=query_embeddings[i],
-        )
-
-        # Fallback 1: drop doc_type filter, lower threshold (no extra LLM cost, 1 extra RPC)
-        if not chunks:
-            logger.info(
-                f"[retrieve_context] '{section_id}': 0 chunks at primary threshold="
-                f"{settings.retrieval_threshold}, fallback-1 (all doc_types, threshold=0.35)"
-            )
+        # Primary retrieval: each query angle → merge, dedup by best similarity
+        merged: dict[str, dict] = {}
+        for query, emb in zip(queries, embeddings):
             chunks = retrieve_chunks(
-                query=queries[i],
-                doc_types=None,
-                threshold=0.35,
-                top_k=4,
-                query_embedding=query_embeddings[i],
+                query=query,
+                doc_types=doc_types,
+                threshold=settings.retrieval_threshold,
+                query_embedding=emb,
             )
+            for c in chunks:
+                # Dedup key: prefer explicit id, fall back to text fingerprint
+                cid = str(c.get("id") or c.get("chunk_id") or
+                          f"{c.get('source_name','')}|{(c.get('chunk_text') or '')[:60]}")
+                if cid not in merged or c.get("similarity", 0) > merged[cid].get("similarity", 0):
+                    merged[cid] = c
 
-        # Fallback 2: HyDE — Haiku generates a hypothetical KB passage, re-embed and retry.
-        # Only fires when fallback-1 also returns 0. ~300 Haiku tokens per affected section.
+        chunks = list(merged.values())
+        # Sort by similarity desc for consistent ordering before rerank
+        chunks.sort(key=lambda x: x.get("similarity", 0), reverse=True)
+
+        # Fallback Tier-1 ── drop doc_type filter + lower threshold
         if not chunks:
             logger.info(
-                f"[retrieve_context] '{section_id}': fallback-1 empty, running HyDE"
+                f"[retrieve_context] '{sid}': 0 chunks with doc_type filter, "
+                "falling back to all doc_types threshold=0.35"
             )
+            for query, emb in zip(queries[:2], embeddings[:2]):
+                fb = retrieve_chunks(
+                    query=query,
+                    doc_types=None,
+                    threshold=0.35,
+                    top_k=4,
+                    query_embedding=emb,
+                )
+                for c in fb:
+                    cid = str(c.get("id") or c.get("chunk_id") or
+                              f"{c.get('source_name','')}|{(c.get('chunk_text') or '')[:60]}")
+                    if cid not in merged or c.get("similarity", 0) > merged[cid].get("similarity", 0):
+                        merged[cid] = c
+            chunks = sorted(merged.values(), key=lambda x: x.get("similarity", 0), reverse=True)
+
+        # Fallback Tier-2 ── HyDE
+        if not chunks:
+            logger.info(f"[retrieve_context] '{sid}': fallback-1 empty, running HyDE")
             hyde_passage, hyde_usage = _generate_hyde_passage(
-                client,
-                section.get("section_name", ""),
-                section.get("requirements") or [],
-                tender_excerpt,
+                client, section, tender_ctx
             )
             if hyde_usage:
                 _token_usage.append(hyde_usage)
-            hyde_embedding = embed_query(hyde_passage)
+            hyde_emb = embed_query(hyde_passage)
             chunks = retrieve_chunks(
                 query=hyde_passage,
                 doc_types=None,
                 threshold=0.30,
                 top_k=4,
-                query_embedding=hyde_embedding,
+                query_embedding=hyde_emb,
             )
             if chunks:
-                logger.info(
-                    f"[retrieve_context] '{section_id}': HyDE recovered {len(chunks)} chunks"
-                )
+                logger.info(f"[retrieve_context] '{sid}': HyDE recovered {len(chunks)} chunks")
 
-        chunks, rerank_usage = _rerank_chunks(
-            client,
-            section.get("section_name", ""),
-            section.get("requirements") or [],
-            chunks,
-        )
+        # Rerank: Haiku scores each chunk against requirements + tender domain
+        chunks, rerank_usage = _rerank_chunks(client, section, tender_ctx, chunks)
         if rerank_usage:
             _token_usage.append(rerank_usage)
 
-        retrieved_chunks[section_id] = chunks
-        logger.debug(
-            f"[retrieve_context] Section '{section_id}': {len(chunks)} chunks after rerank"
-        )
+        retrieved_chunks[sid] = chunks
+        logger.debug(f"[retrieve_context] '{sid}': {len(chunks)} chunks after rerank")
 
-    # Update section confidence flags
+    # Step 5 ── update section confidence flags
     updated_sections = []
     for section in state["sections"]:
         updated = dict(section)
         chunks = retrieved_chunks.get(section["section_id"], [])
-
         if not chunks:
             updated["confidence"] = "LOW"
             updated["gap_flag"] = (
-                f"No relevant content found in KB for doc_type(s): "
-                f"{', '.join(section.get('doc_types_needed', ['any']))}"
+                f"No relevant KB content found for "
+                f"{', '.join(section.get('doc_types_needed', ['any']))} "
+                f"in domain: {tender_ctx.get('domain', 'this tender')}"
             )
         elif len(chunks) < 2:
             updated["confidence"] = "MEDIUM"
@@ -140,10 +261,9 @@ def retrieve_context(state: TenderState) -> dict:
         else:
             updated["confidence"] = "HIGH"
             updated["gap_flag"] = None
-
         updated_sections.append(updated)
 
-    # Compute primary scores (includes _effective_weights sentinel)
+    # Step 6 ── primary scoring
     primary_scores = _compute_primary_scores(state, retrieved_chunks)
     effective_weights: dict = primary_scores.pop("_effective_weights", {})
 
@@ -153,7 +273,6 @@ def retrieve_context(state: TenderState) -> dict:
             for k in primary_scores) / weight_sum,
         100.0,
     )
-
     logger.info(f"[retrieve_context] Primary score: {primary_total:.1f}")
 
     return {
@@ -166,72 +285,177 @@ def retrieve_context(state: TenderState) -> dict:
     }
 
 
-# ── Query Formulation ─────────────────────────────────────────────────────────
+# ── Tender context extraction ──────────────────────────────────────────────────
 
-def _build_section_query(section: dict, tender_excerpt: str) -> str:
+def _extract_tender_context(
+    client: anthropic.Anthropic,
+    tender_text: str,
+) -> tuple[dict, dict | None]:
     """
-    Build a rich embedding query for a section.
-    Uses all requirements (not just first 3) plus a tender excerpt for context.
-    """
-    all_reqs = " | ".join(section.get("requirements") or [])
-    return (
-        f"{section.get('section_name', '')}: {all_reqs}"
-        f"\nTender context: {tender_excerpt[:300]}"
-    )
+    One Haiku call (~150 output tokens) to extract:
+      domain       — 3-5 word topic label
+      authority    — contracting body name
+      keywords     — 6 technical/regulatory terms
+      skills       — 5 professional skills implied by the tender
+      deliverables — 3 expected output types
 
+    Returns (context_dict, usage_dict | None).
+    Falls back to keyword extraction from text on failure.
+    """
+    for attempt in range(3):
+        try:
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=200,
+                messages=[{
+                    "role": "user",
+                    "content": (
+                        "Extract the following from this tender document. "
+                        "Respond in the exact format shown — no other text.\n\n"
+                        "domain: <3-5 word topic, e.g. 'ICT provider DORA mapping'>\n"
+                        "authority: <contracting body, e.g. 'EBA'>\n"
+                        "keywords: <6 comma-separated technical/regulatory terms>\n"
+                        "skills: <5 comma-separated professional skills needed>\n"
+                        "deliverables: <3 comma-separated output types, e.g. 'dataset,report,analysis'>\n\n"
+                        f"Tender:\n{tender_text[:2000]}"
+                    ),
+                }],
+            )
+            usage = {
+                "op": "tender_context_extract",
+                "model": "claude-haiku-4-5-20251001",
+                "input": response.usage.input_tokens,
+                "output": response.usage.output_tokens,
+            }
+            ctx = _parse_context_response(response.content[0].text)
+            return ctx, usage
+
+        except anthropic.APIStatusError as e:
+            if e.status_code == 529 and attempt < 2:
+                time.sleep([5, 15][attempt])
+                continue
+            logger.warning(f"[tender_context] Haiku failed ({e}), using fallback extraction")
+            return _fallback_context(tender_text), None
+        except Exception as e:
+            logger.warning(f"[tender_context] Haiku failed ({e}), using fallback extraction")
+            return _fallback_context(tender_text), None
+
+    return _fallback_context(tender_text), None
+
+
+def _parse_context_response(text: str) -> dict:
+    """Parse key: value lines from the Haiku context response."""
+    result: dict = {"domain": "", "authority": "", "keywords": [], "skills": [], "deliverables": []}
+    for line in text.strip().splitlines():
+        if ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        key = key.strip().lower()
+        val = val.strip()
+        if key == "domain":
+            result["domain"] = val
+        elif key == "authority":
+            result["authority"] = val
+        elif key == "keywords":
+            result["keywords"] = [k.strip() for k in val.split(",") if k.strip()]
+        elif key == "skills":
+            result["skills"] = [s.strip() for s in val.split(",") if s.strip()]
+        elif key == "deliverables":
+            result["deliverables"] = [d.strip() for d in val.split(",") if d.strip()]
+    return result
+
+
+def _fallback_context(tender_text: str) -> dict:
+    """Simple regex-based fallback when Haiku is unavailable."""
+    words = re.findall(r'\b[A-Z][A-Z0-9]{2,}\b', tender_text[:3000])
+    freq: dict[str, int] = {}
+    for w in words:
+        freq[w] = freq.get(w, 0) + 1
+    keywords = [w for w, _ in sorted(freq.items(), key=lambda x: -x[1])[:6]]
+    return {
+        "domain": "EU institutional tender",
+        "authority": "",
+        "keywords": keywords,
+        "skills": ["regulatory", "data analysis", "project management", "research", "technical"],
+        "deliverables": ["report", "dataset", "analysis"],
+    }
+
+
+# ── HyDE ───────────────────────────────────────────────────────────────────────
 
 def _generate_hyde_passage(
     client: anthropic.Anthropic,
-    section_name: str,
-    requirements: list[str],
-    tender_excerpt: str,
+    section: dict,
+    tender_ctx: dict,
 ) -> tuple[str, dict | None]:
     """
-    HyDE: generate a short hypothetical KB chunk that would answer this section.
+    HyDE: generate a hypothetical KB chunk that would answer this section.
+    Uses tender domain context for specificity.
     Returns (passage, usage_dict | None).
     """
-    reqs = "; ".join(requirements[:4])
-    try:
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=200,
-            messages=[{
-                "role": "user",
-                "content": (
-                    "Write a concise 3-sentence description of past work or methodology "
-                    "relevant to this proposal section. Be specific and technical. "
-                    "Write as if from a past project document.\n\n"
-                    f"Section: {section_name}\n"
-                    f"Requirements: {reqs}\n"
-                    f"Tender context: {tender_excerpt[:200]}"
-                ),
-            }],
-        )
-        usage = {"op": "hyde", "model": "claude-haiku-4-5-20251001",
-                 "input": response.usage.input_tokens, "output": response.usage.output_tokens}
-        return response.content[0].text.strip(), usage
-    except Exception as e:
-        logger.warning(f"[hyde] Haiku call failed for '{section_name}': {e} — using plain query")
-        return f"{section_name}: {reqs}", None
+    reqs = "; ".join((section.get("requirements") or [])[:3])
+    domain = tender_ctx.get("domain", "")
+    keywords = ", ".join(tender_ctx.get("keywords", [])[:4])
 
+    for attempt in range(3):
+        try:
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=200,
+                messages=[{
+                    "role": "user",
+                    "content": (
+                        "Write a concise 3-sentence excerpt from a past project document "
+                        f"relevant to this tender section. Domain: {domain}. "
+                        f"Key topics: {keywords}. Be specific and technical.\n\n"
+                        f"Section: {section.get('section_name', '')}\n"
+                        f"Requirements: {reqs}"
+                    ),
+                }],
+            )
+            usage = {
+                "op": "hyde",
+                "model": "claude-haiku-4-5-20251001",
+                "input": response.usage.input_tokens,
+                "output": response.usage.output_tokens,
+            }
+            return response.content[0].text.strip(), usage
+        except anthropic.APIStatusError as e:
+            if e.status_code == 529 and attempt < 2:
+                time.sleep([5, 15][attempt])
+                continue
+            fallback = f"{domain} {section.get('section_name', '')} {reqs}"
+            logger.warning(f"[hyde] Failed for '{section.get('section_id')}': {e}")
+            return fallback, None
+        except Exception as e:
+            fallback = f"{domain} {section.get('section_name', '')} {reqs}"
+            logger.warning(f"[hyde] Failed for '{section.get('section_id')}': {e}")
+            return fallback, None
+
+    return f"{domain} {section.get('section_name', '')}", None
+
+
+# ── Reranker ───────────────────────────────────────────────────────────────────
 
 def _rerank_chunks(
     client: anthropic.Anthropic,
-    section_name: str,
-    requirements: list[str],
+    section: dict,
+    tender_ctx: dict,
     chunks: list[dict],
     top_n: int = 4,
 ) -> tuple[list[dict], dict | None]:
     """
-    Score each chunk 0-10 with Haiku, sort descending, return top_n.
-    Returns (ranked_chunks, usage_dict | None).
+    Haiku rates each chunk 0-10 for relevance to the section + tender domain.
+    Returns (top_n ranked chunks, usage_dict | None).
     """
     if not chunks:
         return chunks, None
 
-    reqs_text = "; ".join(requirements[:5])
+    section_name = section.get("section_name", "")
+    reqs_text = "; ".join((section.get("requirements") or [])[:4])
+    domain = tender_ctx.get("domain", "")
     numbered = "\n".join(
-        f"{i}. [{c.get('doc_type', 'doc')}] {c.get('chunk_text', '')[:200]}"
+        f"{i}. [{c.get('doc_type', 'doc')}] {(c.get('chunk_text') or '')[:200]}"
         for i, c in enumerate(chunks)
     )
 
@@ -239,20 +463,23 @@ def _rerank_chunks(
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=150,
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        f"Section: {section_name}\n"
-                        f"Requirements: {reqs_text}\n\n"
-                        f"Rate each chunk's relevance 0-10:\n{numbered}\n\n"
-                        "Respond with ONLY comma-separated integers, one per chunk. Example: 8,3,7"
-                    ),
-                }
-            ],
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Tender domain: {domain}\n"
+                    f"Section: {section_name}\n"
+                    f"Requirements: {reqs_text}\n\n"
+                    f"Rate each chunk's relevance 0-10:\n{numbered}\n\n"
+                    "Respond with ONLY comma-separated integers, one per chunk. Example: 8,3,7"
+                ),
+            }],
         )
-        usage = {"op": "rerank", "model": "claude-haiku-4-5-20251001",
-                 "input": response.usage.input_tokens, "output": response.usage.output_tokens}
+        usage = {
+            "op": "rerank",
+            "model": "claude-haiku-4-5-20251001",
+            "input": response.usage.input_tokens,
+            "output": response.usage.output_tokens,
+        }
         scores_text = response.content[0].text.strip()
         raw_tokens = re.split(r"[,\s]+", scores_text)
         scores = [float(t) for t in raw_tokens if t]
@@ -260,35 +487,32 @@ def _rerank_chunks(
         if len(scores) != len(chunks):
             logger.warning(
                 f"[rerank] Score count mismatch ({len(scores)} vs {len(chunks)}) "
-                f"for '{section_name}', using original order truncated to {top_n}"
+                f"for '{section_name}', using original order"
             )
             return chunks[:top_n], usage
 
         scored = sorted(zip(scores, chunks), key=lambda x: x[0], reverse=True)
         kept = [c for _, c in scored[:top_n]]
         logger.debug(
-            f"[rerank] '{section_name}': {len(chunks)} → {len(kept)} chunks "
+            f"[rerank] '{section_name}': {len(chunks)} → {len(kept)} "
             f"(top scores: {[round(s, 1) for s, _ in scored[:top_n]]})"
         )
         return kept, usage
 
     except (ValueError, IndexError) as e:
-        logger.warning(f"[rerank] Could not parse Haiku scores for '{section_name}': {e!r}")
+        logger.warning(f"[rerank] Score parse failed for '{section_name}': {e!r}")
         return chunks[:top_n], None
     except Exception as e:
-        logger.warning(f"[rerank] Haiku call failed for '{section_name}': {e} — using top {top_n} by similarity")
+        logger.warning(f"[rerank] Haiku failed for '{section_name}': {e}")
         return chunks[:top_n], None
 
 
-# ── Primary Scoring Modules ───────────────────────────────────────────────────
+# ── Primary Scoring ────────────────────────────────────────────────────────────
 
 def _compute_primary_scores(state: TenderState, retrieved_chunks: dict) -> dict[str, float]:
     scores: dict[str, float] = {}
 
     # M1: Track Record — similarity-weighted past tender coverage
-    # Avg similarity is the primary quality driver; count provides a sub-linear
-    # volume bonus (square-root dampened, saturates at 5 chunks) so a single
-    # high-similarity chunk scores better than several low-similarity ones.
     past_sims = [
         c.get("similarity", 0.5)
         for chunks in retrieved_chunks.values()
@@ -302,10 +526,7 @@ def _compute_primary_scores(state: TenderState, retrieved_chunks: dict) -> dict[
     else:
         scores["M1_track_record"] = 0.0
 
-    # M2: Expertise Depth — avg quality of best-retrieved chunk per section.
-    # Measures whether retrieval can actually serve content for each section.
-    # Doc_type agnostic: M1 captures past_tender quality, M4 captures CV quality.
-    # Empty section → 0.0 (genuine retrieval gap, penalise).
+    # M2: Expertise Depth — avg best-chunk similarity per section
     section_best_sims = []
     for s in state["sections"]:
         chunks = retrieved_chunks.get(s["section_id"], [])
@@ -318,17 +539,16 @@ def _compute_primary_scores(state: TenderState, retrieved_chunks: dict) -> dict[
         if section_best_sims else 50.0
     )
 
-    # M3: Methodology Fit — Haiku assessment (neutral 50 when no methodology in KB)
-    methodology_chunks: list[dict] = []
-    for chunks in retrieved_chunks.values():
-        methodology_chunks.extend(c for c in chunks if c.get("doc_type") == "methodology")
-    scores["M3_methodology_fit"] = _score_methodology_fit(
-        methodology_chunks, state.get("tender_text", "")[:1000]
-    )
+    # M3: Methodology Fit — avg similarity of methodology chunks
+    methodology_chunks = [
+        c
+        for chunks in retrieved_chunks.values()
+        for c in chunks
+        if c.get("doc_type") == "methodology"
+    ]
+    scores["M3_methodology_fit"] = _score_methodology_fit(methodology_chunks)
 
-    # M4: Delivery Credibility — similarity-weighted CV coverage.
-    # 50 = neutral/unknown (no CVs in KB at all — three-layer fallback confirms absence).
-    # 0 is never emitted for missing doc_type — that conflates "bad team" with "no data".
+    # M4: Delivery Credibility — CV coverage
     cv_sims = [
         c.get("similarity", 0.5)
         for chunks in retrieved_chunks.values()
@@ -338,21 +558,15 @@ def _compute_primary_scores(state: TenderState, retrieved_chunks: dict) -> dict[
     if cv_sims:
         avg_sim = sum(cv_sims) / len(cv_sims)
         count_factor = min(len(cv_sims) / 4.0, 1.0) ** 0.5
-        # Scale to 50-100: having any CV is always above neutral.
-        # quality=1.0 (4 high-sim CVs) → 100; quality=0.4 (1 mid-sim CV) → 70.
         quality = avg_sim * count_factor
         scores["M4_delivery_credibility"] = min(50.0 + quality * 50.0, 100.0)
     else:
-        scores["M4_delivery_credibility"] = 50.0  # neutral: absent from KB, not assessed
+        scores["M4_delivery_credibility"] = 50.0
 
-    # M5: Pricing — neutral when no pricing data in KB
+    # M5: Pricing — neutral
     scores["M5_pricing"] = 70.0
 
-    # ── Weight reallocation ───────────────────────────────────────────────────
-    # When a doc_type is absent from KB, its module gets a neutral score (50).
-    # But neutral scores at 20% weight each structurally cap primary at ~67.
-    # Redistribute absent-module weights to modules that have real data,
-    # so the score reflects actual KB strength rather than penalising missing content.
+    # Weight reallocation for absent doc_types
     kb_has_cv = bool(cv_sims)
     kb_has_methodology = bool(methodology_chunks)
 
@@ -380,23 +594,13 @@ def _compute_primary_scores(state: TenderState, retrieved_chunks: dict) -> dict[
         for k in assessed:
             w[k] += freed * (w[k] / assessed_total)
 
-    scores["_effective_weights"] = w  # consumed by caller, not stored in TenderState
+    scores["_effective_weights"] = w
     return scores
 
 
-def _score_methodology_fit(methodology_chunks: list[dict], tender_excerpt: str) -> float:
-    """
-    Score methodology fit as average cosine similarity of retrieved methodology chunks.
-
-    Each chunk's `similarity` (0-1, from pgvector RPC) captures semantic alignment
-    with the section query which incorporates tender context. Averaging and scaling
-    to 0-100 gives a deterministic, free, consistent M3 score.
-
-    Returns 50.0 (neutral) when no methodology chunks exist in the KB.
-    """
+def _score_methodology_fit(methodology_chunks: list[dict]) -> float:
+    """Average cosine similarity of methodology chunks scaled to 0-100."""
     if not methodology_chunks:
-        return 50.0  # neutral — absent from KB, not penalised
-
+        return 50.0
     sims = [c.get("similarity", 0.0) for c in methodology_chunks]
-    avg_sim = sum(sims) / len(sims)
-    return round(min(avg_sim * 100.0, 100.0), 1)
+    return round(min(sum(sims) / len(sims) * 100.0, 100.0), 1)

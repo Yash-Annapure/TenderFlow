@@ -25,12 +25,22 @@ export default function ReviewPanel({ job, onSubmit, onReset, onTokensAdded, isH
         setSections(
           (data.sections || []).map(s => ({
             ...s,
-            user_edits: s.user_edits || s.draft_text || '',
+            user_edits: s.user_edits || s.finalised_content || s.draft_text || '',
           }))
         )
         setLoading(false)
       })
-      .catch(e => { setError(e.message); setLoading(false) })
+      .catch(() => {
+        // Fallback: use sections already on the job object (history / done views)
+        const fallbackSections = job.sections_json || job.sections || []
+        setSections(
+          fallbackSections.map(s => ({
+            ...s,
+            user_edits: s.user_edits || s.finalised_content || s.draft_text || '',
+          }))
+        )
+        setLoading(false)
+      })
   }, [job.tender_id])
 
   // Scroll preview to active section
@@ -45,16 +55,28 @@ export default function ReviewPanel({ job, onSubmit, onReset, onTokensAdded, isH
     setSections(prev => prev.map((s, i) => i === idx ? { ...s, user_edits: value } : s))
   }, [])
 
-  const handleReiterate = useCallback(async (idx, instruction) => {
+  const handleRename = useCallback((idx, name) => {
+    setSections(prev => prev.map((s, i) => i === idx ? { ...s, section_name: name } : s))
+  }, [])
+
+  const handleReiterate = useCallback(async (idx, instruction, appendMode = false) => {
     const s = sections[idx]
+    // Strip DRAFT ERROR markers so the model gets clean context
+    const cleanDraft = (s.user_edits || s.draft_text || '').replace(/\[DRAFT ERROR[^\]]*\]/g, '').trim()
     const result = await reiterateSection({
       sectionName:   s.section_name,
       requirements:  s.requirements,
-      currentDraft:  s.user_edits || s.draft_text,
+      currentDraft:  cleanDraft,
       instruction,
       wordTarget:    s.word_count_target || 500,
     })
-    setSections(prev => prev.map((sec, i) => i === idx ? { ...sec, user_edits: result.text } : sec))
+    setSections(prev => prev.map((sec, i) => {
+      if (i !== idx) return sec
+      const newText = appendMode && cleanDraft
+        ? cleanDraft + '\n\n' + result.text
+        : result.text
+      return { ...sec, user_edits: newText }
+    }))
     onTokensAdded?.([{
       op:     `reiterate:${s.section_id}`,
       model:  'claude-haiku-4-5-20251001',
@@ -68,9 +90,9 @@ export default function ReviewPanel({ job, onSubmit, onReset, onTokensAdded, isH
     setError(null)
     try {
       const result = await submitReview(job.tender_id, { sections, feedback, requestAnotherRound: anotherRound })
-      onSubmit(result)
+      onSubmit({ ...result, tender_id: job.tender_id })
     } catch (e) {
-      setError(e.message)
+      setError(typeof e.message === 'string' ? e.message : JSON.stringify(e.message))
       setSubmitting(false)
     }
   }
@@ -126,6 +148,30 @@ export default function ReviewPanel({ job, onSubmit, onReset, onTokensAdded, isH
               <ConfidenceDot confidence={s.confidence} />
             </button>
           ))}
+          {!isHistoryView && (
+            <button
+              className="review-nav-add-btn"
+              onClick={() => {
+                const newId = `custom_${Date.now()}`
+                const newSection = {
+                  section_id: newId,
+                  section_name: 'New Section',
+                  user_edits: '',
+                  draft_text: '',
+                  requirements: [],
+                  sources_used: [],
+                  confidence: 'MEDIUM',
+                  gap_flag: null,
+                  word_count_target: 400,
+                  isNew: true,
+                }
+                setSections(prev => [...prev, newSection])
+                setActiveIdx(sections.length)
+              }}
+            >
+              + Add Section
+            </button>
+          )}
         </div>
 
       </div>
@@ -157,9 +203,9 @@ export default function ReviewPanel({ job, onSubmit, onReset, onTokensAdded, isH
               Download DOCX
             </a>
           )}
-          {!isHistoryView && (
+          {(!isHistoryView || job?.status === 'done') && (
             <button className="review-submit-topbar-btn" onClick={handleSubmit} disabled={submitting}>
-              {submitting ? 'Submitting…' : anotherRound ? 'Submit & Revise' : 'Submit & Finalise'}
+              {submitting ? 'Submitting…' : anotherRound ? 'Submit & Revise' : job?.status === 'done' ? 'Re-finalise' : 'Submit & Finalise'}
             </button>
           )}
         </div>
@@ -179,7 +225,8 @@ export default function ReviewPanel({ job, onSubmit, onReset, onTokensAdded, isH
                   jobStatus={job?.status}
                   isHistoryView={isHistoryView}
                   onEdit={(v) => handleEdit(activeIdx, v)}
-                  onReiterate={(inst) => handleReiterate(activeIdx, inst)}
+                  onRename={(name) => handleRename(activeIdx, name)}
+                  onReiterate={(inst, appendMode) => handleReiterate(activeIdx, inst, appendMode)}
                   onPrev={() => setActiveIdx(i => Math.max(0, i - 1))}
                   onNext={() => setActiveIdx(i => Math.min(sections.length - 1, i + 1))}
                 />
@@ -229,9 +276,10 @@ export default function ReviewPanel({ job, onSubmit, onReset, onTokensAdded, isH
 
 /* ─────────────────────────────────────────────────────────────────────────── */
 
-function SectionEditor({ section, index, total, tenderId, jobStatus, isHistoryView, onEdit, onReiterate, onPrev, onNext }) {
+function SectionEditor({ section, index, total, tenderId, jobStatus, isHistoryView, onEdit, onRename, onReiterate, onPrev, onNext }) {
   const [reiterateOpen,  setReiterateOpen]  = useState(false)
   const [instruction,    setInstruction]    = useState('')
+  const [appendMode,     setAppendMode]     = useState(false)
   const [reiterating,    setReiterating]    = useState(false)
   const [reiterateError, setReiterateError] = useState(null)
 
@@ -240,7 +288,7 @@ function SectionEditor({ section, index, total, tenderId, jobStatus, isHistoryVi
     setReiterating(true)
     setReiterateError(null)
     try {
-      await onReiterate(instruction.trim())
+      await onReiterate(instruction.trim(), appendMode)
       setInstruction('')
       setReiterateOpen(false)
     } catch (e) {
@@ -275,6 +323,16 @@ function SectionEditor({ section, index, total, tenderId, jobStatus, isHistoryVi
         </div>
       )}
 
+      {/* Editable name for new sections */}
+      {section.isNew && (
+        <input
+          className="section-name-input"
+          value={section.section_name}
+          onChange={e => onRename(e.target.value)}
+          placeholder="Section name…"
+        />
+      )}
+
       {/* Draft textarea */}
       <div className="section-editor-label">
         Draft
@@ -286,7 +344,7 @@ function SectionEditor({ section, index, total, tenderId, jobStatus, isHistoryVi
         className="section-draft-textarea"
         value={section.user_edits ?? section.draft_text ?? ''}
         onChange={e => onEdit(e.target.value)}
-        placeholder="Draft will appear here..."
+        placeholder={section.isNew ? 'Write your new section here, or use Re-iterate with AI…' : 'Draft will appear here…'}
       />
 
       {/* ── Re-iterate button ── */}
@@ -314,6 +372,10 @@ function SectionEditor({ section, index, total, tenderId, jobStatus, isHistoryVi
             />
             {reiterateError && <div className="reiterate-error">{reiterateError}</div>}
             <div className="reiterate-actions">
+              <label className="reiterate-append-toggle" title="Append AI output after existing text instead of replacing it">
+                <input type="checkbox" checked={appendMode} onChange={e => setAppendMode(e.target.checked)} />
+                Append
+              </label>
               <span className="reiterate-model-badge">claude-haiku-4-5 · ⌘↵</span>
               <button
                 className="reiterate-submit-btn"
@@ -322,9 +384,7 @@ function SectionEditor({ section, index, total, tenderId, jobStatus, isHistoryVi
               >
                 {reiterating ? (
                   <><RingSpinner /> Rewriting…</>
-                ) : (
-                  'Revise Section'
-                )}
+                ) : appendMode ? 'Add to Section' : 'Revise Section'}
               </button>
             </div>
           </div>

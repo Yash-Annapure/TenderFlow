@@ -35,7 +35,7 @@ def get_review(tender_id: str):
         raise HTTPException(status_code=404, detail=f"Tender job {tender_id} not found")
 
     job = result.data[0]
-    if job["status"] != STATUS_AWAITING_REVIEW:
+    if job["status"] not in (STATUS_AWAITING_REVIEW, STATUS_DONE):
         raise HTTPException(
             status_code=409,
             detail=f"Tender is not awaiting review (status: {job['status']})",
@@ -80,17 +80,18 @@ def submit_review(
         raise HTTPException(status_code=404, detail=f"Tender job {tender_id} not found")
 
     job = result.data[0]
-    if job["status"] != STATUS_AWAITING_REVIEW:
+    if job["status"] not in (STATUS_AWAITING_REVIEW, STATUS_DONE):
         raise HTTPException(
             status_code=409,
-            detail=f"Cannot submit: tender is not awaiting review (status: {job['status']})",
+            detail=f"Cannot submit: tender is not in a reviewable state (status: {job['status']})",
         )
 
     current_iteration = job.get("hitl_iteration", 0)
     new_iteration = current_iteration + 1
 
-    # Build edits lookup
+    # Build edits + new-section lookup from the submitted payload
     edits_map = {edit.section_id: edit.user_edits for edit in body.sections}
+    submitted_ids = {edit.section_id for edit in body.sections}
 
     graph = get_graph()
     config = get_thread_config(tender_id)
@@ -98,8 +99,9 @@ def submit_review(
     # Load current state snapshot
     state_snapshot = graph.get_state(config)
     current_sections: list[dict] = list(state_snapshot.values.get("sections", []))
+    existing_ids = {s["section_id"] for s in current_sections}
 
-    # Apply user edits to sections
+    # Apply user edits to existing sections
     updated_sections = []
     for section in current_sections:
         updated = dict(section)
@@ -107,7 +109,30 @@ def submit_review(
             updated["user_edits"] = edits_map[section["section_id"]]
         updated_sections.append(updated)
 
-    # Inject updated state into checkpoint
+    # Append brand-new sections the user added in the UI
+    for edit in body.sections:
+        if edit.section_id not in existing_ids:
+            updated_sections.append({
+                "section_id": edit.section_id,
+                "section_name": edit.section_name or edit.section_id,
+                "user_edits": edit.user_edits or "",
+                "draft_text": edit.user_edits or "",
+                "requirements": edit.requirements or [],
+                "sources_used": [],
+                "confidence": "MEDIUM",
+                "gap_flag": None,
+                "word_count_target": 400,
+            })
+
+    resubmit_from_done = job["status"] == STATUS_DONE
+
+    # Inject updated state into checkpoint.
+    # For jobs already at END (done), use as_node="human_review" so the graph
+    # treats this as a new checkpoint after human_review, with finalise next.
+    update_kwargs = {}
+    if resubmit_from_done:
+        update_kwargs["as_node"] = "human_review"
+
     graph.update_state(
         config,
         {
@@ -116,6 +141,7 @@ def submit_review(
             "request_another_round": body.request_another_round,
             "hitl_iteration": new_iteration,
         },
+        **update_kwargs,
     )
 
     # Update DB status
@@ -178,8 +204,18 @@ def _resume_graph(tender_id: str) -> None:
                 {"sections_json": sections_for_frontend, "score_json": score_json},
             )
         else:
-            # Graph reached END
-            _update_job(STATUS_DONE, {"output_path": current_values.get("output_path")})
+            # Graph reached END — persist finalised sections so history view can show them
+            final_sections = [
+                {k: v for k, v in s.items()}
+                for s in current_values.get("sections", [])
+            ]
+            _update_job(
+                STATUS_DONE,
+                {
+                    "output_path": current_values.get("output_path"),
+                    "sections_json": final_sections,
+                },
+            )
             logger.info(f"[hitl] Tender {tender_id} completed → {current_values.get('output_path')}")
 
     except Exception as e:

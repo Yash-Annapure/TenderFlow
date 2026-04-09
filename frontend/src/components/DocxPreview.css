@@ -3,9 +3,12 @@
   flex: 1;
   overflow-y: auto;
   background: #1a1a1a;
-  padding: 32px 24px 48px;
+  /* padding-bottom is swallowed by overflow:auto in Chrome/WebKit — use
+     margin-bottom on .docx-page instead */
+  padding: 32px 24px 0;
   display: flex;
   justify-content: center;
+  align-items: flex-start;   /* don't stretch the page to fill viewport height */
 }
 
 /* ── The A4 page itself ─────────────────────────────────────────────────── */
@@ -14,6 +17,8 @@
   width: 100%;
   max-width: 760px;
   min-height: 800px;
+  /* margin-bottom carries the bottom gap that padding-bottom can't (flex+overflow bug) */
+  margin-bottom: 48px;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
   font-family: 'Calibri', 'Source Sans Pro', 'Segoe UI', Arial, sans-serif;
   color: #1a1a1a;
@@ -139,6 +144,7 @@
   opacity: 0.6;
   font-size: 14px;
 }
+
 
 /* ── Body content — mirrors the EBA PDF ────────────────────────────────── */
 .docx-section-body p {

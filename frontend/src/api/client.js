@@ -27,8 +27,10 @@ export async function submitReview(tenderId, { sections, feedback, requestAnothe
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       sections: sections.map(s => ({
-        section_id: s.section_id,
-        user_edits: s.user_edits ?? null,
+        section_id:   s.section_id,
+        user_edits:   s.user_edits ?? '',
+        section_name: s.section_name ?? null,
+        requirements: s.requirements ?? null,
       })),
       feedback: feedback ?? '',
       request_another_round: requestAnotherRound ?? false,
