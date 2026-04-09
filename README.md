@@ -13,39 +13,9 @@ TenderFlow ingests an incoming tender document (PDF/DOCX), analyses its requirem
 
 ## Agent Architecture
 
-```
-START
-  │
-  ▼
-┌─────────────────┐
-│ analyse_tender  │  (tool)  — Parses the tender, extracts sections, compliance
-└────────┬────────┘            checklist, and dimension weights (Opus)
-         │
-         ▼
-┌─────────────────┐
-│retrieve_context │  (tool)  — pgvector similarity search per section;
-└────────┬────────┘            assigns confidence + gap flags (Voyage AI)
-         │
-         ▼
-┌─────────────────┐
-│ draft_sections  │  (tool)  — Generates a draft per section using retrieved
-└────────┬────────┘            KB chunks; scores all 7 quality modules
-         │
-         ▼
-┌──────────────────────────┐
-│ human_review  INTERRUPT  │  — LangGraph pauses here (HITL)
-│       (HITL)             │    User edits drafts + submits feedback via UI
-└────────┬─────────────────┘
-         │◄──────────────── loop condition true (request_another_round)
-         ▼
-┌─────────────────┐
-│    finalise     │  (tool)  — Polishes accepted edits with Sonnet,
-└────────┬────────┘            writes final DOCX via python-docx
-         │
-         │  loop condition false
-         ▼
-        END
-```
+<img width="400" height="530" alt="mermaid-diagram" src="https://github.com/user-attachments/assets/6ecb53e7-356b-4935-bcb4-2e393cc4f483" />
+
+---
 
 Every tool node also writes a **checkpoint** to Supabase (PostgresSaver) — the HITL interrupt/resume cycle survives process restarts.
 
