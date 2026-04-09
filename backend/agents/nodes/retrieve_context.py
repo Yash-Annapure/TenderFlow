@@ -492,7 +492,12 @@ def _rerank_chunks(
             return chunks[:top_n], usage
 
         scored = sorted(zip(scores, chunks), key=lambda x: x[0], reverse=True)
-        kept = [c for _, c in scored[:top_n]]
+        # Store normalised rerank score (0–1) in each chunk for use in primary scoring
+        kept = []
+        for rk_score, c in scored[:top_n]:
+            c = dict(c)
+            c["rerank_score"] = rk_score / 10.0   # normalise 0-10 → 0-1
+            kept.append(c)
         logger.debug(
             f"[rerank] '{section_name}': {len(chunks)} → {len(kept)} "
             f"(top scores: {[round(s, 1) for s, _ in scored[:top_n]]})"
@@ -509,37 +514,48 @@ def _rerank_chunks(
 
 # ── Primary Scoring ────────────────────────────────────────────────────────────
 
+def _blended_score(c: dict) -> float:
+    """Blend cosine similarity (60%) with normalised rerank score (40%).
+    If no rerank score available, fall back to similarity only."""
+    sim = c.get("similarity", 0.5)
+    rk  = c.get("rerank_score")          # 0–1, set by _rerank_chunks
+    if rk is None:
+        return sim
+    return 0.60 * sim + 0.40 * rk
+
+
 def _compute_primary_scores(state: TenderState, retrieved_chunks: dict) -> dict[str, float]:
     scores: dict[str, float] = {}
 
-    # M1: Track Record — similarity-weighted past tender coverage
-    past_sims = [
-        c.get("similarity", 0.5)
+    # M1: Track Record — rerank-blended past tender coverage
+    past_chunks = [
+        c
         for chunks in retrieved_chunks.values()
         for c in chunks
         if c.get("doc_type") == "past_tender"
     ]
-    if past_sims:
-        avg_sim = sum(past_sims) / len(past_sims)
-        count_factor = min(len(past_sims) / 5.0, 1.0) ** 0.5
-        scores["M1_track_record"] = min(avg_sim * count_factor * 100.0, 100.0)
+    if past_chunks:
+        blended = [_blended_score(c) for c in past_chunks]
+        avg_blended  = sum(blended) / len(blended)
+        count_factor = min(len(blended) / 5.0, 1.0) ** 0.5
+        scores["M1_track_record"] = min(avg_blended * count_factor * 100.0, 100.0)
     else:
         scores["M1_track_record"] = 0.0
 
-    # M2: Expertise Depth — avg best-chunk similarity per section
-    section_best_sims = []
+    # M2: Expertise Depth — best blended score per section, averaged across sections
+    section_best = []
     for s in state["sections"]:
         chunks = retrieved_chunks.get(s["section_id"], [])
         if chunks:
-            section_best_sims.append(max(c.get("similarity", 0.0) for c in chunks))
+            section_best.append(max(_blended_score(c) for c in chunks))
         else:
-            section_best_sims.append(0.0)
+            section_best.append(0.0)
     scores["M2_expertise_depth"] = (
-        (sum(section_best_sims) / len(section_best_sims)) * 100.0
-        if section_best_sims else 50.0
+        (sum(section_best) / len(section_best)) * 100.0
+        if section_best else 50.0
     )
 
-    # M3: Methodology Fit — avg similarity of methodology chunks
+    # M3: Methodology Fit — blended score of methodology chunks
     methodology_chunks = [
         c
         for chunks in retrieved_chunks.values()
@@ -548,26 +564,26 @@ def _compute_primary_scores(state: TenderState, retrieved_chunks: dict) -> dict[
     ]
     scores["M3_methodology_fit"] = _score_methodology_fit(methodology_chunks)
 
-    # M4: Delivery Credibility — CV coverage
-    cv_sims = [
-        c.get("similarity", 0.5)
+    # M4: Delivery Credibility — CV coverage; floor is 0 (no CVs → no credit)
+    cv_chunks = [
+        c
         for chunks in retrieved_chunks.values()
         for c in chunks
         if c.get("doc_type") == "cv"
     ]
-    if cv_sims:
-        avg_sim = sum(cv_sims) / len(cv_sims)
-        count_factor = min(len(cv_sims) / 4.0, 1.0) ** 0.5
-        quality = avg_sim * count_factor
-        scores["M4_delivery_credibility"] = min(50.0 + quality * 50.0, 100.0)
+    if cv_chunks:
+        blended     = [_blended_score(c) for c in cv_chunks]
+        avg_blended = sum(blended) / len(blended)
+        count_factor = min(len(blended) / 4.0, 1.0) ** 0.5
+        scores["M4_delivery_credibility"] = min(avg_blended * count_factor * 100.0, 100.0)
     else:
-        scores["M4_delivery_credibility"] = 50.0
+        scores["M4_delivery_credibility"] = 0.0   # was 50 — dishonest floor removed
 
-    # M5: Pricing — neutral
-    scores["M5_pricing"] = 70.0
+    # M5: Pricing — derive from budget match between tender and drafted price section
+    scores["M5_pricing"] = _score_pricing(state, retrieved_chunks)
 
     # Weight reallocation for absent doc_types
-    kb_has_cv = bool(cv_sims)
+    kb_has_cv          = bool(cv_chunks)
     kb_has_methodology = bool(methodology_chunks)
 
     base = state.get("dimension_weights") or {}
@@ -599,8 +615,61 @@ def _compute_primary_scores(state: TenderState, retrieved_chunks: dict) -> dict[
 
 
 def _score_methodology_fit(methodology_chunks: list[dict]) -> float:
-    """Average cosine similarity of methodology chunks scaled to 0-100."""
+    """Blended rerank+similarity score of methodology chunks scaled to 0-100."""
     if not methodology_chunks:
         return 50.0
-    sims = [c.get("similarity", 0.0) for c in methodology_chunks]
-    return round(min(sum(sims) / len(sims) * 100.0, 100.0), 1)
+    blended = [_blended_score(c) for c in methodology_chunks]
+    return round(min(sum(blended) / len(blended) * 100.0, 100.0), 1)
+
+
+def _score_pricing(state: TenderState, retrieved_chunks: dict) -> float:
+    """
+    M5: Compare drafted Price section TOTAL against the tender's stated budget.
+    Returns 0-100 based on how close the bid is to the tender's expected value.
+    Falls back to 65 if either figure cannot be parsed.
+    """
+    import re as _re
+
+    def _extract_eur(text: str) -> float | None:
+        """Return first EUR amount found (millions or raw), or None."""
+        # e.g. EUR 3.2M, €3,200,000, 3.2 million EUR
+        m = _re.search(
+            r'(?:EUR|€)\s*([\d,\.]+)\s*[Mm](?:illion)?|'
+            r'([\d,\.]+)\s*[Mm](?:illion)?\s*(?:EUR|€)|'
+            r'(?:EUR|€)\s*([\d\.,]+)',
+            text, _re.IGNORECASE
+        )
+        if not m:
+            return None
+        raw = next(g for g in m.groups() if g is not None)
+        raw = raw.replace(',', '')
+        val = float(raw)
+        # heuristic: if < 1000 assume millions
+        return val * 1_000_000 if val < 10_000 else val
+
+    # Get tender budget from the price section tender extract
+    tender_text = state.get("tender_text", "")
+    tender_budget = _extract_eur(tender_text[-6000:])   # budget usually near the end
+
+    # Get bid total from the drafted price section
+    price_section = next(
+        (s for s in state.get("sections", []) if s.get("section_id") == "price"),
+        None
+    )
+    draft_price_text = (
+        (price_section or {}).get("draft_text") or ""
+    )
+    bid_total = _extract_eur(draft_price_text)
+
+    if tender_budget and bid_total and tender_budget > 0:
+        deviation = abs(bid_total - tender_budget) / tender_budget
+        # <5% deviation → 95, <15% → ~80, <30% → ~55, >50% → 30
+        score = max(30.0, 100.0 - deviation * 230.0)
+        logger.debug(
+            f"[M5] tender_budget={tender_budget/1e6:.2f}M  "
+            f"bid={bid_total/1e6:.2f}M  deviation={deviation:.1%}  score={score:.1f}"
+        )
+        return round(score, 1)
+
+    # No budget parseable — neutral but not inflated
+    return 65.0

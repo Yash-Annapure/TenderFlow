@@ -410,11 +410,59 @@ def _score_compliance(sections: list[dict], checklist: list[dict]) -> tuple[floa
             return 60.0, None
 
 
+def _table_bonus(sections: list[dict]) -> float:
+    """
+    Award automatic robustness points for complete mandatory tables.
+    These are structured evidence — Haiku prose scoring undervalues them.
+
+    Deliverables table with ≥4 data rows  → +18 pts
+    Team table with ≥3 named rows          → +15 pts
+    Price table with TOTAL row             → +12 pts
+    Entity Typology table with ≥5 rows     → +10 pts
+    Maximum possible bonus: 55 pts (capped later against 100).
+    """
+    bonus = 0.0
+    TABLE_ROW = re.compile(r'^\s*\|.+\|\s*$')
+    SEP_ROW   = re.compile(r'^\s*\|[\s\-:|]+\|\s*$')
+
+    def _data_rows(text: str) -> list[str]:
+        """Return non-separator pipe rows from a text block."""
+        return [
+            l for l in text.splitlines()
+            if TABLE_ROW.match(l) and not SEP_ROW.match(l)
+        ]
+
+    for s in sections:
+        sid   = s.get("section_id", "")
+        draft = s.get("draft_text") or ""
+        rows  = _data_rows(draft)
+        data_rows = rows[1:]   # skip header row
+
+        if sid == "deliverables" and len(data_rows) >= 4:
+            bonus += 18.0
+        elif sid == "team" and len(data_rows) >= 3:
+            bonus += 15.0
+        elif sid == "price" and any("total" in r.lower() for r in data_rows):
+            bonus += 12.0
+        elif sid == "entity_typology" and len(data_rows) >= 5:
+            bonus += 10.0
+
+    return bonus
+
+
 def _score_robustness(sections: list[dict]) -> tuple[float, dict | None]:
-    """Module 7: Haiku counts quantified claims. Returns (score, usage | None)."""
-    drafts = _all_drafts(sections)
+    """Module 7: Haiku counts quantified claims in prose; table bonus added separately."""
+    # Prose-only sections sent to Haiku (tables are handled by _table_bonus)
+    TABLE_SIDS = {"deliverables", "team", "price", "entity_typology"}
+    prose_sections = [s for s in sections if s.get("section_id") not in TABLE_SIDS]
+    drafts = _all_drafts(prose_sections)
+
+    # Pre-compute table bonus (deterministic, no API cost)
+    bonus = _table_bonus(sections)
+
     if not drafts.strip():
-        return 20.0, None
+        # No prose — score is purely from tables
+        return min(30.0 + bonus, 100.0), None
 
     client = _get_client()
     for attempt in range(3):
@@ -426,24 +474,28 @@ def _score_robustness(sections: list[dict]) -> tuple[float, dict | None]:
                     {
                         "role": "user",
                         "content": (
-                            "Score 0-100 for robustness of these tender sections.\n"
+                            "Score 0-100 for robustness of these tender prose sections.\n"
                             "Scoring guide:\n"
                             "  +10 per unique quantified claim (number/€/%) up to 40 pts\n"
                             "  +10 per named project or client reference up to 30 pts\n"
                             "  -10 per unsupported assertion (claim with no evidence)\n"
                             "  Base score: 30\n"
                             "Respond with only a number.\n\n"
-                            f"Sections:\n{drafts[:3000]}"
+                            f"Prose sections:\n{drafts[:3000]}"
                         ),
                     }
                 ],
             )
             usage = {"op": "robustness_score", "model": "claude-haiku-4-5-20251001",
                      "input": response.usage.input_tokens, "output": response.usage.output_tokens}
-            return max(min(float(response.content[0].text.strip()), 100.0), 0.0), usage
+            prose_score = max(min(float(response.content[0].text.strip()), 100.0), 0.0)
+            # Blend: prose score weighted 65%, table bonus added on top (capped at 100)
+            combined = min(prose_score * 0.65 + bonus, 100.0)
+            logger.debug(f"[robustness] prose={prose_score:.1f}  table_bonus={bonus:.1f}  combined={combined:.1f}")
+            return combined, usage
         except anthropic.APIStatusError as e:
             if e.status_code == 529 and attempt < 2:
                 time.sleep([5, 15][attempt]); continue
-            return 50.0, None
+            return min(50.0 + bonus * 0.5, 100.0), None
         except (ValueError, Exception):
-            return 50.0, None
+            return min(50.0 + bonus * 0.5, 100.0), None

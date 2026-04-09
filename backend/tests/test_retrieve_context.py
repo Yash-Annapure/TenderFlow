@@ -471,27 +471,29 @@ def test_m3_in_scores_is_50_when_no_methodology():
     assert scores["M3_methodology_fit"] == 50.0
 
 
-def test_m4_is_50_when_no_cv_chunks():
+def test_m4_is_zero_when_no_cv_chunks():
+    """No CVs in KB → M4 = 0 (honest floor, not inflated 50)."""
     from agents.nodes.retrieve_context import _compute_primary_scores
     state = _make_state(sections=[_make_section(doc_types=["past_tender"])])
     scores = _compute_primary_scores(state, {"s1": [{"doc_type": "past_tender", "similarity": 0.80}]})
-    assert scores["M4_delivery_credibility"] == 50.0
+    assert scores["M4_delivery_credibility"] == 0.0
 
 
 def test_m4_nonzero_when_cv_chunks_present():
     from agents.nodes.retrieve_context import _compute_primary_scores
     state = _make_state(sections=[_make_section(doc_types=["cv"])])
     scores = _compute_primary_scores(state, {"s1": [{"doc_type": "cv", "similarity": 0.80}]})
-    assert scores["M4_delivery_credibility"] > 50.0
+    assert scores["M4_delivery_credibility"] > 0.0
 
 
-def test_m4_never_zero_from_missing_cv():
+def test_m4_zero_when_no_cv_in_retrieval():
+    """Weight reallocation happens but M4 value is 0 when CVs absent."""
     from agents.nodes.retrieve_context import _compute_primary_scores
     sections = [_make_section(doc_types=["methodology", "cv", "past_tender"])]
     retrieved = {"s1": [{"doc_type": "past_tender", "similarity": 0.75}]}
     state = _make_state(sections=sections)
     scores = _compute_primary_scores(state, retrieved)
-    assert scores["M4_delivery_credibility"] != 0.0
+    assert scores["M4_delivery_credibility"] == 0.0
 
 
 def test_effective_weights_reallocated_when_no_cv_no_methodology():
