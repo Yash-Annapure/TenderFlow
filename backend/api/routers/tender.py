@@ -103,6 +103,7 @@ async def start_tender(
         "output_path": None,
         "status": STATUS_PENDING,
         "error_message": None,
+        "token_usage": [],
     }
 
     background_tasks.add_task(_run_graph, tender_id=tender_id, initial_state=initial_state)
@@ -314,6 +315,7 @@ def _run_graph(tender_id: str, initial_state: TenderState) -> None:
                 "robustness_score": current_values.get("robustness_score", 0),
                 "final_score": current_values.get("final_score", 0),
                 "score_justifications": current_values.get("score_justifications", {}),
+                "token_log": current_values.get("token_usage", []),
             }
             _update_job(
                 STATUS_AWAITING_REVIEW,

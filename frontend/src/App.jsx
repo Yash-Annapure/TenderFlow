@@ -94,13 +94,17 @@ export default function App() {
         }
         if (toolMap[status]) setActiveToolCall(toolMap[status])
 
-        // Add token estimates on key transitions
-        if (status === 'drafting') {
-          // We now know section count from job state or estimate 4
+        // Use actual token data when available, fall back to estimates
+        if (status === 'awaiting_review' && data.score_json?.token_log?.length > 0) {
+          // Real usage from backend — replace estimates entirely
+          setTokenLog(addOps(emptyLog(), data.score_json.token_log))
+        } else if (status === 'drafting') {
           const sectionCount = data.sections_json?.length ?? 4
           addTokenOps(buildPipelineEstimates(sectionCount))
         }
-        if (status === 'finalising') {
+        if (status === 'done' && data.score_json?.token_log?.length > 0) {
+          setTokenLog(addOps(emptyLog(), data.score_json.token_log))
+        } else if (status === 'finalising') {
           const sectionCount = data.sections_json?.length ?? 4
           addTokenOps(buildFinalisationEstimates(sectionCount))
         }

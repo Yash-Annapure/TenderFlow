@@ -13,7 +13,8 @@ SectionDraft lifecycle:
   finalise         → populates finalised_content
 """
 
-from typing import Optional, TypedDict
+import operator
+from typing import Annotated, Optional, TypedDict
 
 
 class SectionDraft(TypedDict):
@@ -60,6 +61,11 @@ class TenderState(TypedDict):
     user_feedback: str                   # Free-text feedback submitted with user edits
     request_another_round: bool          # True → loop back to human_review after finalise
     hitl_iteration: int                  # Incremented on each HITL submit (max 3)
+
+    # ── Token tracking ────────────────────────────────────────────────────────
+    # Each node appends {op, model, input, output} dicts.
+    # Annotated with operator.add so LangGraph concatenates across node updates.
+    token_usage: Annotated[list[dict], operator.add]
 
     # ── Output ────────────────────────────────────────────────────────────────
     output_path: Optional[str]           # Absolute path to generated .docx file

@@ -137,6 +137,7 @@ def analyse_tender(state: TenderState) -> dict:
             "compliance_checklist": [],
             "dimension_weights": _DEFAULT_WEIGHTS,
             "status": STATUS_ANALYSING,
+            "token_usage": [],
             "error_message": str(e),
         }
 
@@ -145,6 +146,8 @@ def analyse_tender(state: TenderState) -> dict:
         f"output_tokens={response.usage.output_tokens} "
         f"blocks={[b.type for b in response.content]}"
     )
+    _token_usage = [{"op": "analyse_tender", "model": "claude-haiku-4-5-20251001",
+                     "input": response.usage.input_tokens, "output": response.usage.output_tokens}]
 
     analysis: dict = {}
     for block in response.content:
@@ -159,6 +162,7 @@ def analyse_tender(state: TenderState) -> dict:
             "compliance_checklist": [],
             "dimension_weights": _DEFAULT_WEIGHTS,
             "status": STATUS_ANALYSING,
+            "token_usage": _token_usage,
         }
 
     sections: list[SectionDraft] = [
@@ -185,6 +189,7 @@ def analyse_tender(state: TenderState) -> dict:
         "compliance_checklist": analysis.get("compliance_checklist", []),
         "dimension_weights": analysis.get("dimension_weights", _DEFAULT_WEIGHTS),
         "status": STATUS_ANALYSING,
+        "token_usage": _token_usage,
         # Initialise scoring fields to 0 so downstream nodes can safely read them
         "primary_scores": {},
         "primary_score_total": 0.0,

@@ -50,6 +50,7 @@ def finalise(state: TenderState) -> dict:
     client = _get_client()
     user_feedback = state.get("user_feedback", "")
     updated_sections = []
+    _token_usage: list[dict] = []
 
     for section in state["sections"]:
         updated = dict(section)
@@ -57,9 +58,12 @@ def finalise(state: TenderState) -> dict:
 
         if user_edits:
             logger.debug(f"[finalise] Polishing section '{section['section_id']}'")
-            updated["finalised_content"] = _apply_finishing_touches(
+            polished, usage = _apply_finishing_touches(
                 client, section, user_edits, user_feedback
             )
+            updated["finalised_content"] = polished
+            if usage:
+                _token_usage.append(usage)
         else:
             # No human edits — preserve AI draft unchanged
             updated["finalised_content"] = section.get("draft_text", "")
@@ -77,6 +81,7 @@ def finalise(state: TenderState) -> dict:
         "output_path": output_path,
         "status": STATUS_DONE,
         "request_another_round": False,
+        "token_usage": _token_usage,
     }
 
 
@@ -85,8 +90,8 @@ def _apply_finishing_touches(
     section: dict,
     user_edits: str,
     user_feedback: str,
-) -> str:
-    """Sonnet: polish the human-edited text without changing its substance."""
+) -> tuple[str, dict | None]:
+    """Sonnet: polish the human-edited text. Returns (polished_text, usage | None)."""
     try:
         response = client.messages.create(
             model="claude-sonnet-4-6",
@@ -104,7 +109,9 @@ def _apply_finishing_touches(
                 }
             ],
         )
-        return response.content[0].text.strip()
+        usage = {"op": "finalise", "model": "claude-sonnet-4-6",
+                 "input": response.usage.input_tokens, "output": response.usage.output_tokens}
+        return response.content[0].text.strip(), usage
     except Exception as e:
         logger.error(f"[finalise] Sonnet polish failed for '{section['section_id']}': {e}")
-        return user_edits  # Fall back to raw user edit on error
+        return user_edits, None

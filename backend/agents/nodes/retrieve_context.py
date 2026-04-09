@@ -46,6 +46,7 @@ def retrieve_context(state: TenderState) -> dict:
     logger.info(f"[retrieve_context] {len(state['sections'])} sections to retrieve")
 
     retrieved_chunks: dict[str, list[dict]] = {}
+    _token_usage: list[dict] = []
 
     tender_excerpt = state.get("tender_text") or ""
     queries = [_build_section_query(s, tender_excerpt) for s in state["sections"]]
@@ -86,12 +87,14 @@ def retrieve_context(state: TenderState) -> dict:
             logger.info(
                 f"[retrieve_context] '{section_id}': fallback-1 empty, running HyDE"
             )
-            hyde_passage = _generate_hyde_passage(
+            hyde_passage, hyde_usage = _generate_hyde_passage(
                 client,
                 section.get("section_name", ""),
                 section.get("requirements") or [],
                 tender_excerpt,
             )
+            if hyde_usage:
+                _token_usage.append(hyde_usage)
             hyde_embedding = embed_query(hyde_passage)
             chunks = retrieve_chunks(
                 query=hyde_passage,
@@ -105,12 +108,14 @@ def retrieve_context(state: TenderState) -> dict:
                     f"[retrieve_context] '{section_id}': HyDE recovered {len(chunks)} chunks"
                 )
 
-        chunks = _rerank_chunks(
+        chunks, rerank_usage = _rerank_chunks(
             client,
             section.get("section_name", ""),
             section.get("requirements") or [],
             chunks,
         )
+        if rerank_usage:
+            _token_usage.append(rerank_usage)
 
         retrieved_chunks[section_id] = chunks
         logger.debug(
@@ -157,6 +162,7 @@ def retrieve_context(state: TenderState) -> dict:
         "primary_scores": primary_scores,
         "primary_score_total": primary_total,
         "status": STATUS_RETRIEVING,
+        "token_usage": _token_usage,
     }
 
 
@@ -179,12 +185,10 @@ def _generate_hyde_passage(
     section_name: str,
     requirements: list[str],
     tender_excerpt: str,
-) -> str:
+) -> tuple[str, dict | None]:
     """
     HyDE: generate a short hypothetical KB chunk that would answer this section.
-    Embedding a declarative passage closes the question→prose geometric gap
-    that causes low cosine scores for niche topics.
-    ~300 Haiku tokens. Falls back to a plain string on any error.
+    Returns (passage, usage_dict | None).
     """
     reqs = "; ".join(requirements[:4])
     try:
@@ -203,10 +207,12 @@ def _generate_hyde_passage(
                 ),
             }],
         )
-        return response.content[0].text.strip()
+        usage = {"op": "hyde", "model": "claude-haiku-4-5-20251001",
+                 "input": response.usage.input_tokens, "output": response.usage.output_tokens}
+        return response.content[0].text.strip(), usage
     except Exception as e:
         logger.warning(f"[hyde] Haiku call failed for '{section_name}': {e} — using plain query")
-        return f"{section_name}: {reqs}"
+        return f"{section_name}: {reqs}", None
 
 
 def _rerank_chunks(
@@ -215,20 +221,13 @@ def _rerank_chunks(
     requirements: list[str],
     chunks: list[dict],
     top_n: int = 4,
-) -> list[dict]:
+) -> tuple[list[dict], dict | None]:
     """
     Score each chunk 0-10 with Haiku, sort descending, return top_n.
-
-    Replaces threshold-drop approach: rather than binary keep/drop at score 5,
-    scores rank chunks and top_n best are always returned. This guarantees:
-    - Always returns 1..top_n chunks (never zero, never unfiltered fallback).
-    - Relevance rank is always respected.
-    - Consistent behaviour regardless of score distribution.
-
-    Falls back to original chunks truncated to top_n on any Haiku error.
+    Returns (ranked_chunks, usage_dict | None).
     """
     if not chunks:
-        return chunks
+        return chunks, None
 
     reqs_text = "; ".join(requirements[:5])
     numbered = "\n".join(
@@ -252,6 +251,8 @@ def _rerank_chunks(
                 }
             ],
         )
+        usage = {"op": "rerank", "model": "claude-haiku-4-5-20251001",
+                 "input": response.usage.input_tokens, "output": response.usage.output_tokens}
         scores_text = response.content[0].text.strip()
         raw_tokens = re.split(r"[,\s]+", scores_text)
         scores = [float(t) for t in raw_tokens if t]
@@ -261,7 +262,7 @@ def _rerank_chunks(
                 f"[rerank] Score count mismatch ({len(scores)} vs {len(chunks)}) "
                 f"for '{section_name}', using original order truncated to {top_n}"
             )
-            return chunks[:top_n]
+            return chunks[:top_n], usage
 
         scored = sorted(zip(scores, chunks), key=lambda x: x[0], reverse=True)
         kept = [c for _, c in scored[:top_n]]
@@ -269,14 +270,14 @@ def _rerank_chunks(
             f"[rerank] '{section_name}': {len(chunks)} → {len(kept)} chunks "
             f"(top scores: {[round(s, 1) for s, _ in scored[:top_n]]})"
         )
-        return kept
+        return kept, usage
 
     except (ValueError, IndexError) as e:
         logger.warning(f"[rerank] Could not parse Haiku scores for '{section_name}': {e!r}")
-        return chunks[:top_n]
+        return chunks[:top_n], None
     except Exception as e:
         logger.warning(f"[rerank] Haiku call failed for '{section_name}': {e} — using top {top_n} by similarity")
-        return chunks[:top_n]
+        return chunks[:top_n], None
 
 
 # ── Primary Scoring Modules ───────────────────────────────────────────────────

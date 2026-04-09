@@ -80,13 +80,14 @@ def test_rerank_sorts_by_score_and_takes_top_n():
     mock_client = MagicMock()
     mock_client.messages.create.return_value.content = [MagicMock(text="8,2,7")]
 
-    result = _rerank_chunks(mock_client, "Background", ["Describe company"], chunks)
+    result, usage = _rerank_chunks(mock_client, "Background", ["Describe company"], chunks)
 
     # All 3 returned (3 < top_n=4), sorted: A(8) > C(7) > B(2)
     assert len(result) == 3
     assert result[0]["source_name"] == "A"
     assert result[1]["source_name"] == "C"
     assert result[2]["source_name"] == "B"
+    assert usage is not None and usage["op"] == "rerank"
 
 
 def test_rerank_returns_all_if_haiku_fails():
@@ -99,8 +100,9 @@ def test_rerank_returns_all_if_haiku_fails():
     mock_client = MagicMock()
     mock_client.messages.create.side_effect = Exception("API error")
 
-    result = _rerank_chunks(mock_client, "Background", ["req"], chunks)
+    result, usage = _rerank_chunks(mock_client, "Background", ["req"], chunks)
     assert result == chunks
+    assert usage is None
 
 
 def test_rerank_skipped_when_no_chunks():
@@ -108,9 +110,10 @@ def test_rerank_skipped_when_no_chunks():
     from agents.nodes.retrieve_context import _rerank_chunks
 
     mock_client = MagicMock()
-    result = _rerank_chunks(mock_client, "Background", ["req"], [])
+    result, usage = _rerank_chunks(mock_client, "Background", ["req"], [])
     mock_client.messages.create.assert_not_called()
     assert result == []
+    assert usage is None
 
 
 def test_rerank_handles_score_count_mismatch():
@@ -126,7 +129,7 @@ def test_rerank_handles_score_count_mismatch():
     # Returns only 2 scores for 3 chunks
     mock_client.messages.create.return_value.content = [MagicMock(text="8,2")]
 
-    result = _rerank_chunks(mock_client, "Background", ["req"], chunks)
+    result, usage = _rerank_chunks(mock_client, "Background", ["req"], chunks)
     assert result == chunks  # falls back to original
 
 
@@ -138,7 +141,7 @@ def test_rerank_handles_unparseable_output():
     mock_client = MagicMock()
     mock_client.messages.create.return_value.content = [MagicMock(text="cannot parse this")]
 
-    result = _rerank_chunks(mock_client, "Background", ["req"], chunks)
+    result, usage = _rerank_chunks(mock_client, "Background", ["req"], chunks)
     assert result == chunks
 
 
@@ -153,7 +156,7 @@ def test_rerank_returns_top_n_sorted_even_when_all_score_low():
     mock_client = MagicMock()
     mock_client.messages.create.return_value.content = [MagicMock(text="2,1")]
 
-    result = _rerank_chunks(mock_client, "Background", ["req"], chunks)
+    result, usage = _rerank_chunks(mock_client, "Background", ["req"], chunks)
     assert len(result) == 2          # both returned (2 < top_n=4)
     assert result[0]["source_name"] == "A"  # score 2 > score 1, A comes first
 
@@ -187,7 +190,7 @@ def test_fallback1_triggered_when_primary_returns_empty():
 
     with patch("agents.nodes.retrieve_context.retrieve_chunks", side_effect=fake_retrieve), \
          patch("agents.nodes.retrieve_context.embed_queries", return_value=[[0.1] * 512]), \
-         patch("agents.nodes.retrieve_context._rerank_chunks", side_effect=lambda c, n, r, chunks: chunks), \
+         patch("agents.nodes.retrieve_context._rerank_chunks", side_effect=lambda c, n, r, chunks: (chunks, None)), \
          patch("agents.nodes.retrieve_context._compute_primary_scores", return_value={
              "M1_track_record": 0, "M2_expertise_depth": 0, "M3_methodology_fit": 30,
              "M4_delivery_credibility": 0, "M5_pricing": 70}):
@@ -214,7 +217,7 @@ def test_fallback1_not_triggered_when_primary_succeeds():
 
     with patch("agents.nodes.retrieve_context.retrieve_chunks", side_effect=fake_retrieve), \
          patch("agents.nodes.retrieve_context.embed_queries", return_value=[[0.1] * 512]), \
-         patch("agents.nodes.retrieve_context._rerank_chunks", side_effect=lambda c, n, r, chunks: chunks), \
+         patch("agents.nodes.retrieve_context._rerank_chunks", side_effect=lambda c, n, r, chunks: (chunks, None)), \
          patch("agents.nodes.retrieve_context._compute_primary_scores", return_value={
              "M1_track_record": 0, "M2_expertise_depth": 0, "M3_methodology_fit": 30,
              "M4_delivery_credibility": 0, "M5_pricing": 70}):
@@ -243,8 +246,8 @@ def test_hyde_triggered_when_both_primary_and_fallback1_empty():
     with patch("agents.nodes.retrieve_context.retrieve_chunks", side_effect=fake_retrieve), \
          patch("agents.nodes.retrieve_context.embed_queries", return_value=[[0.1] * 512]), \
          patch("agents.nodes.retrieve_context.embed_query", return_value=[0.2] * 512), \
-         patch("agents.nodes.retrieve_context._generate_hyde_passage", return_value="hypothetical passage"), \
-         patch("agents.nodes.retrieve_context._rerank_chunks", side_effect=lambda c, n, r, chunks: chunks), \
+         patch("agents.nodes.retrieve_context._generate_hyde_passage", return_value=("hypothetical passage", None)), \
+         patch("agents.nodes.retrieve_context._rerank_chunks", side_effect=lambda c, n, r, chunks: (chunks, None)), \
          patch("agents.nodes.retrieve_context._compute_primary_scores", return_value={
              "M1_track_record": 0, "M2_expertise_depth": 0, "M3_methodology_fit": 30,
              "M4_delivery_credibility": 0, "M5_pricing": 70}):
@@ -262,10 +265,11 @@ def test_hyde_passage_generation_graceful_fallback():
     mock_client = MagicMock()
     mock_client.messages.create.side_effect = Exception("Haiku API error")
 
-    result = _generate_hyde_passage(mock_client, "AI Ecosystem Mapping", ["req1", "req2"], "tender text")
+    result, usage = _generate_hyde_passage(mock_client, "AI Ecosystem Mapping", ["req1", "req2"], "tender text")
 
     assert isinstance(result, str)
     assert len(result) > 0
+    assert usage is None  # error path returns None usage
 
 
 def test_m1_uses_similarity_not_raw_count():

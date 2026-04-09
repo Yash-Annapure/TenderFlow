@@ -64,6 +64,9 @@ def draft_sections(state: TenderState) -> dict:
     retrieved_chunks = state.get("retrieved_chunks", {})
     tender_excerpt = state.get("tender_text", "")[:2000]
 
+    _token_usage: list[dict] = []
+    _usage_lock = __import__("threading").Lock()
+
     def _draft_section_task(section: dict) -> dict:
         section_id = section["section_id"]
         chunks = retrieved_chunks.get(section_id, [])
@@ -82,7 +85,11 @@ def draft_sections(state: TenderState) -> dict:
             for c in chunks
         )
         sources = list({c.get("source_name", "") for c in chunks if c.get("source_name")})
-        updated["draft_text"] = _draft_one_section(client, section, context, tender_excerpt)
+        draft_text, usage = _draft_one_section(client, section, context, tender_excerpt)
+        if usage:
+            with _usage_lock:
+                _token_usage.append(usage)
+        updated["draft_text"] = draft_text
         updated["sources_used"] = sources
         return updated
 
@@ -98,8 +105,12 @@ def draft_sections(state: TenderState) -> dict:
     updated_sections = [updated_sections_map[s["section_id"]] for s in state["sections"]]
 
     # Quality scoring
-    compliance_score = _score_compliance(updated_sections, state.get("compliance_checklist", []))
-    robustness_score = _score_robustness(updated_sections)
+    compliance_score, compliance_usage = _score_compliance(updated_sections, state.get("compliance_checklist", []))
+    robustness_score, robustness_usage = _score_robustness(updated_sections)
+    if compliance_usage:
+        _token_usage.append(compliance_usage)
+    if robustness_usage:
+        _token_usage.append(robustness_usage)
     quality_score = compliance_score * 0.55 + robustness_score * 0.45
     primary_total = state.get("primary_score_total", 0.0)
     final_score = primary_total * 0.60 + quality_score * 0.40
@@ -120,6 +131,7 @@ def draft_sections(state: TenderState) -> dict:
         "final_score": final_score,
         "score_justifications": justifications,
         "status": STATUS_AWAITING_REVIEW,
+        "token_usage": _token_usage,
     }
 
 
@@ -130,7 +142,8 @@ def _draft_one_section(
     section: dict,
     context: str,
     tender_excerpt: str,
-) -> str:
+) -> tuple[str, dict | None]:
+    """Returns (draft_text, usage_dict | None)."""
     requirements_text = "\n".join(f"- {r}" for r in section.get("requirements", []))
     word_target = min(section.get("word_count_target", 250), 300)
 
@@ -153,10 +166,12 @@ def _draft_one_section(
                 }
             ],
         )
-        return response.content[0].text.strip()
+        usage = {"op": "draft_section", "model": "claude-sonnet-4-6",
+                 "input": response.usage.input_tokens, "output": response.usage.output_tokens}
+        return response.content[0].text.strip(), usage
     except Exception as e:
         logger.error(f"[draft_sections] Sonnet call failed for '{section['section_name']}': {e}")
-        return f"[DRAFT ERROR: {e}]"
+        return f"[DRAFT ERROR: {e}]", None
 
 
 # ── Justification builder ─────────────────────────────────────────────────────
@@ -275,14 +290,14 @@ def _band(score: float) -> str:
     return "WEAK"
 
 
-def _score_compliance(sections: list[dict], checklist: list[dict]) -> float:
-    """Module 6: Haiku rates compliance checklist coverage (~900 tokens)."""
+def _score_compliance(sections: list[dict], checklist: list[dict]) -> tuple[float, dict | None]:
+    """Module 6: Haiku rates compliance checklist coverage. Returns (score, usage | None)."""
     if not checklist:
-        return 75.0
+        return 75.0, None
 
     drafts = _all_drafts(sections)
     if not drafts.strip():
-        return 20.0
+        return 20.0, None
 
     mandatory = [item["item"] for item in checklist if item.get("mandatory")]
     optional = [item["item"] for item in checklist if not item.get("mandatory")]
@@ -306,16 +321,18 @@ def _score_compliance(sections: list[dict], checklist: list[dict]) -> float:
                 }
             ],
         )
-        return min(float(response.content[0].text.strip()), 100.0)
+        usage = {"op": "compliance_score", "model": "claude-haiku-4-5-20251001",
+                 "input": response.usage.input_tokens, "output": response.usage.output_tokens}
+        return min(float(response.content[0].text.strip()), 100.0), usage
     except (ValueError, Exception):
-        return 60.0
+        return 60.0, None
 
 
-def _score_robustness(sections: list[dict]) -> float:
-    """Module 7: Haiku counts quantified claims and named references (~700 tokens)."""
+def _score_robustness(sections: list[dict]) -> tuple[float, dict | None]:
+    """Module 7: Haiku counts quantified claims. Returns (score, usage | None)."""
     drafts = _all_drafts(sections)
     if not drafts.strip():
-        return 20.0
+        return 20.0, None
 
     client = _get_client()
     try:
@@ -338,6 +355,8 @@ def _score_robustness(sections: list[dict]) -> float:
                 }
             ],
         )
-        return max(min(float(response.content[0].text.strip()), 100.0), 0.0)
+        usage = {"op": "robustness_score", "model": "claude-haiku-4-5-20251001",
+                 "input": response.usage.input_tokens, "output": response.usage.output_tokens}
+        return max(min(float(response.content[0].text.strip()), 100.0), 0.0), usage
     except (ValueError, Exception):
-        return 50.0
+        return 50.0, None
