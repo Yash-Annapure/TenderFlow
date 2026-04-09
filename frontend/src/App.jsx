@@ -176,13 +176,24 @@ export default function App() {
       />
       <div className="app-main">
         {historyItem ? (
-          <ChatView
-            job={historyItem.job}
-            messages={historyItem.messages}
-            activeToolCall={null}
-            onReset={() => setHistoryViewId(null)}
-            isHistoryView
-          />
+          (historyItem.job?.status === 'awaiting_review' || historyItem.job?.status === 'done') ? (
+            <ReviewPanel
+              job={historyItem.job}
+              onSubmit={() => setHistoryViewId(null)}
+              onReset={() => setHistoryViewId(null)}
+              tokenLog={tokenLog}
+              onTokensAdded={addTokenOps}
+              isHistoryView
+            />
+          ) : (
+            <ChatView
+              job={historyItem.job}
+              messages={historyItem.messages}
+              activeToolCall={null}
+              onReset={() => setHistoryViewId(null)}
+              isHistoryView
+            />
+          )
         ) : !job ? (
           <LandingView onJobStarted={handleJobStarted} />
         ) : job.status === 'awaiting_review' ? (

@@ -97,11 +97,18 @@ export function textToHtml(text = '') {
     // Empty line — skip (paragraph spacing handled by CSS)
     if (!trimmed) { i++; continue }
 
-    // Regular paragraph — accumulate consecutive non-empty lines
+    // Regular paragraph — accumulate consecutive non-empty lines.
+    // Stop only at lines that are actually headings, bullets, or numbered-list items —
+    // NOT at bare digit-starting lines like "2023 revenue" or "4.2% growth".
     const paraLines = []
-    while (i < lines.length && lines[i].trim() && !isTableRow(lines[i].trim()) &&
-           !/^[-•*#\d]/.test(lines[i].trim())) {
-      paraLines.push(inlineFormat(lines[i].trim()))
+    while (i < lines.length) {
+      const pl = lines[i].trim()
+      if (!pl) break                          // empty line → end paragraph
+      if (isTableRow(pl)) break              // table row
+      if (/^#{1,3}\s/.test(pl)) break        // heading
+      if (/^[-•*]\s/.test(pl)) break         // bullet
+      if (/^\d+[.)]\s/.test(pl)) break       // numbered list item
+      paraLines.push(inlineFormat(pl))
       i++
     }
     if (paraLines.length) out.push(`<p>${paraLines.join(' ')}</p>`)

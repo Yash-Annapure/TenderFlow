@@ -52,6 +52,11 @@
   color: var(--yellow); padding: 3px 8px; border-radius: 100px;
 }
 
+.review-badge--history {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
 .review-iteration { font-size: 11px; color: var(--text-dim); }
 
 .review-reset-btn {
@@ -115,11 +120,12 @@
 
 /* ── Top bar ────────────────────────────────────────────────────────────── */
 .review-topbar {
-  display: flex; align-items: center; gap: 10px;
-  padding: 9px 16px 9px 20px;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px 10px 20px;
   border-bottom: 1px solid var(--border);
   background: var(--sidebar-bg);
   flex-shrink: 0;
+  min-height: 52px;
 }
 
 .review-topbar-left {
@@ -146,6 +152,7 @@
   flex-shrink: 0;
   background: var(--bg);
   position: relative;
+  min-width: 168px;
 }
 
 .view-toggle-pill {
@@ -163,7 +170,7 @@
 
 .view-toggle-btn {
   flex: 1;
-  padding: 5px 0;
+  padding: 6px 14px;
   font-size: 12px;
   font-weight: 500;
   background: none;
@@ -173,6 +180,8 @@
   position: relative;
   z-index: 1;
   text-align: center;
+  white-space: nowrap;
+  min-width: 56px;
 }
 
 .view-toggle-btn:last-child { border-right: none; }
@@ -406,3 +415,21 @@
 }
 .review-submit-btn:hover:not(:disabled) { background: var(--accent-hover); }
 .review-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Download buttons ───────────────────────────────────────────────────── */
+.review-download-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; background: var(--green); color: #fff;
+  border-radius: var(--radius); font-size: 12px; font-weight: 600;
+  text-decoration: none; transition: opacity 0.15s; flex-shrink: 0;
+}
+.review-download-btn:hover { opacity: 0.85; color: #fff; }
+
+.section-download-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px;
+  background: var(--green); color: #fff;
+  border-radius: var(--radius); text-decoration: none;
+  transition: opacity 0.15s; flex-shrink: 0;
+}
+.section-download-btn:hover { opacity: 0.85; color: #fff; }

@@ -19,7 +19,28 @@
   color: #1a1a1a;
   font-size: 13.5px;
   line-height: 1.65;
+  /* Prevent dark-theme CSS variables from bleeding into the white page */
+  isolation: isolate;
 }
+
+/* Force all text inside the page to the document colour,
+   overriding any dark-theme colour inheritance */
+.docx-page * {
+  color: inherit;
+}
+
+.docx-section-heading,
+.docx-section-num {
+  color: #1a5f8a !important;
+}
+
+.docx-section-body h1 { color: #1a5f8a !important; }
+.docx-section-body h2 { color: #1d3557 !important; }
+.docx-section-body h3 { color: #333333 !important; }
+.docx-section-body p,
+.docx-section-body li,
+.docx-section-body td,
+.docx-section-body code { color: #1a1a1a !important; }
 
 /* ── Cover block ────────────────────────────────────────────────────────── */
 .docx-cover {

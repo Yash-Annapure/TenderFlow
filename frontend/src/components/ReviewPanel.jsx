@@ -6,7 +6,7 @@ import './ReviewPanel.css'
 
 const CONFIDENCE_COLOR = { HIGH: '#10a37f', MEDIUM: '#f59e0b', LOW: '#ef4444' }
 
-export default function ReviewPanel({ job, onSubmit, onReset, onTokensAdded }) {
+export default function ReviewPanel({ job, onSubmit, onReset, onTokensAdded, isHistoryView = false }) {
   const [review,        setReview]        = useState(null)
   const [sections,      setSections]      = useState([])
   const [feedback,      setFeedback]      = useState('')
@@ -102,10 +102,15 @@ export default function ReviewPanel({ job, onSubmit, onReset, onTokensAdded }) {
       <div className="review-left">
         <div className="review-left-header">
           <div className="review-left-title">
-            <span className="review-badge">Review</span>
+            {isHistoryView
+              ? <span className="review-badge review-badge--history">History</span>
+              : <span className="review-badge">Review</span>
+            }
             <span className="review-iteration">Round {(review?.hitl_iteration ?? 0) + 1}</span>
           </div>
-          <button className="review-reset-btn" onClick={onReset}>← New</button>
+          <button className="review-reset-btn" onClick={onReset}>
+            {isHistoryView ? '← Back' : '← New'}
+          </button>
         </div>
 
         {scoreJson && <ScoreCard score={scoreJson} />}
@@ -142,9 +147,21 @@ export default function ReviewPanel({ job, onSubmit, onReset, onTokensAdded }) {
             <button className={`view-toggle-btn ${viewMode === 'split' ? 'active' : ''}`}   onClick={() => setViewMode('split')}>Split</button>
             <button className={`view-toggle-btn ${viewMode === 'preview' ? 'active' : ''}`} onClick={() => setViewMode('preview')}>Preview</button>
           </div>
-          <button className="review-submit-topbar-btn" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? 'Submitting…' : anotherRound ? 'Submit & Revise' : 'Submit & Finalise'}
-          </button>
+          {job?.status === 'done' && (
+            <a
+              href={`/tender/${job.tender_id}/download`}
+              className="review-download-btn"
+              download
+            >
+              <DownloadIcon />
+              Download DOCX
+            </a>
+          )}
+          {!isHistoryView && (
+            <button className="review-submit-topbar-btn" onClick={handleSubmit} disabled={submitting}>
+              {submitting ? 'Submitting…' : anotherRound ? 'Submit & Revise' : 'Submit & Finalise'}
+            </button>
+          )}
         </div>
 
         {/* Main content area */}
@@ -158,6 +175,9 @@ export default function ReviewPanel({ job, onSubmit, onReset, onTokensAdded }) {
                   section={sections[activeIdx]}
                   index={activeIdx}
                   total={sections.length}
+                  tenderId={job?.tender_id}
+                  jobStatus={job?.status}
+                  isHistoryView={isHistoryView}
                   onEdit={(v) => handleEdit(activeIdx, v)}
                   onReiterate={(inst) => handleReiterate(activeIdx, inst)}
                   onPrev={() => setActiveIdx(i => Math.max(0, i - 1))}
@@ -209,7 +229,7 @@ export default function ReviewPanel({ job, onSubmit, onReset, onTokensAdded }) {
 
 /* ─────────────────────────────────────────────────────────────────────────── */
 
-function SectionEditor({ section, index, total, onEdit, onReiterate, onPrev, onNext }) {
+function SectionEditor({ section, index, total, tenderId, jobStatus, isHistoryView, onEdit, onReiterate, onPrev, onNext }) {
   const [reiterateOpen,  setReiterateOpen]  = useState(false)
   const [instruction,    setInstruction]    = useState('')
   const [reiterating,    setReiterating]    = useState(false)
@@ -311,11 +331,21 @@ function SectionEditor({ section, index, total, onEdit, onReiterate, onPrev, onN
         )}
       </div>
 
-      {/* Nav */}
+      {/* Nav + download */}
       <div className="section-nav-btns">
         <button className="section-nav-btn" onClick={onPrev} disabled={index === 0}>← Prev</button>
         <span className="section-nav-counter">{index + 1} / {total}</span>
         <button className="section-nav-btn section-nav-btn--primary" onClick={onNext} disabled={index === total - 1}>Next →</button>
+        {jobStatus === 'done' && tenderId && (
+          <a
+            href={`/tender/${tenderId}/download`}
+            className="section-download-btn"
+            download
+            title="Download DOCX"
+          >
+            <DownloadIcon />
+          </a>
+        )}
       </div>
     </div>
   )
@@ -345,6 +375,16 @@ function RingSpinner() {
     <svg className="spinner" width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ display: 'inline-block' }}>
       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.25" />
       <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function DownloadIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
     </svg>
   )
 }

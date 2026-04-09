@@ -71,14 +71,15 @@ function JobStatusCard({ job }) {
   )
 }
 
-function formatRelTime(date) {
-  const diff = Date.now() - new Date(date).getTime()
-  const m = Math.floor(diff / 60000)
-  if (m < 1)  return 'just now'
-  if (m < 60) return `${m}m ago`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h ago`
-  return `${Math.floor(h / 24)}d ago`
+function formatTimestamp(date) {
+  const d = new Date(date)
+  const now = new Date()
+  const isToday = d.toDateString() === now.toDateString()
+  if (isToday) {
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
+    ', ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
 export default function Sidebar({ currentJob, tokenLog, history = [], historyViewId = null, onSelectHistory }) {
@@ -87,6 +88,7 @@ export default function Sidebar({ currentJob, tokenLog, history = [], historyVie
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState(null)
   const [showModal, setShowModal] = useState(false)
+  const [showKBPage, setShowKBPage] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const pollRef = useRef(null)
 
@@ -185,7 +187,7 @@ export default function Sidebar({ currentJob, tokenLog, history = [], historyVie
                           {item.job.score_json.final_score.toFixed(1)}
                         </span>
                       )}
-                      <span className="sidebar-recent-time">{formatRelTime(item.timestamp)}</span>
+                      <span className="sidebar-recent-time">{formatTimestamp(item.timestamp)}</span>
                     </span>
                   </button>
                 ))}
@@ -195,39 +197,21 @@ export default function Sidebar({ currentJob, tokenLog, history = [], historyVie
 
           <div className="sidebar-section-title">Knowledge Base</div>
 
-          <div className="sidebar-kb">
-            {loading ? (
-              <div className="sidebar-empty">Loading...</div>
-            ) : docs.length === 0 ? (
-              <div className="sidebar-empty">No documents ingested yet</div>
-            ) : (
-              Object.entries(grouped).map(([type, items]) => (
-                <div key={type} className="kb-group">
-                  <div className="kb-group-label" style={{ color: DOC_TYPE_COLORS[type] || '#8e8ea0' }}>
-                    {DOC_TYPE_LABELS[type] || type}
-                    <span className="kb-count">{items.length}</span>
-                  </div>
-                  {items.map((doc, idx) => (
-                    <div key={doc.id} className="kb-doc" style={{ animationDelay: `${idx * 60}ms` }}>
-                      <DocIcon type={type} />
-                      <div className="kb-doc-info">
-                        <span className="kb-doc-name" title={doc.filename}>{doc.source_name || doc.filename}</span>
-                        <span className="kb-doc-meta">{doc.chunk_count ?? '—'} chunks</span>
-                      </div>
-                      <StatusDot status={doc.status} />
-                    </div>
-                  ))}
-                </div>
-              ))
-            )}
-          </div>
+          <button className="sidebar-kb-entry" onClick={() => setShowKBPage(true)}>
+            <KBIcon />
+            <span className="sidebar-kb-entry-label">Knowledge Base</span>
+            <span className="sidebar-kb-entry-count">
+              {loading ? '…' : docs.length}
+            </span>
+            <span className="sidebar-kb-entry-arrow">›</span>
+          </button>
 
           {tokenLog && <TokenMeter tokenLog={tokenLog} />}
 
           <div className="sidebar-footer">
-            <button className="sidebar-add-btn" onClick={() => setShowModal(true)}>
+            <button className="sidebar-add-btn" onClick={() => setShowKBPage(true)}>
               <PlusIcon />
-              Add Document
+              Manage KB
             </button>
           </div>
         </>
@@ -249,7 +233,78 @@ export default function Sidebar({ currentJob, tokenLog, history = [], historyVie
           error={uploadError}
         />
       )}
+
+      {showKBPage && (
+        <KnowledgeBasePage
+          docs={docs}
+          grouped={grouped}
+          loading={loading}
+          onClose={() => setShowKBPage(false)}
+          onAddDocument={() => { setShowKBPage(false); setShowModal(true) }}
+        />
+      )}
     </aside>
+  )
+}
+
+function KnowledgeBasePage({ docs, grouped, loading, onClose, onAddDocument }) {
+  return (
+    <div className="kb-page-backdrop" onClick={onClose}>
+      <div className="kb-page" onClick={e => e.stopPropagation()}>
+        <div className="kb-page-header">
+          <div className="kb-page-header-left">
+            <KBIcon size={16} />
+            <span className="kb-page-title">Knowledge Base</span>
+            <span className="kb-page-count">{docs.length} document{docs.length !== 1 ? 's' : ''}</span>
+          </div>
+          <div className="kb-page-header-right">
+            <button className="kb-page-add-btn" onClick={onAddDocument}>
+              <PlusIcon />
+              Add Document
+            </button>
+            <button className="modal-close" onClick={onClose}>✕</button>
+          </div>
+        </div>
+
+        <div className="kb-page-body">
+          {loading ? (
+            <div className="kb-page-empty">Loading…</div>
+          ) : docs.length === 0 ? (
+            <div className="kb-page-empty">
+              <p>No documents ingested yet.</p>
+              <p>Add past tenders, CVs, methodologies, or company profiles to build your knowledge base.</p>
+              <button className="kb-page-add-btn kb-page-add-btn--large" onClick={onAddDocument}>
+                <PlusIcon /> Add your first document
+              </button>
+            </div>
+          ) : (
+            Object.entries(grouped).map(([type, items]) => (
+              <div key={type} className="kb-page-group">
+                <div className="kb-page-group-header">
+                  <span className="kb-page-group-label" style={{ color: DOC_TYPE_COLORS[type] || '#8e8ea0' }}>
+                    {DOC_TYPE_LABELS[type] || type}
+                  </span>
+                  <span className="kb-count">{items.length}</span>
+                </div>
+                <div className="kb-page-docs">
+                  {items.map(doc => (
+                    <div key={doc.id} className="kb-page-doc">
+                      <DocIcon type={type} />
+                      <div className="kb-doc-info">
+                        <span className="kb-doc-name" title={doc.filename}>{doc.source_name || doc.filename}</span>
+                        <span className="kb-doc-meta">{doc.filename} · {doc.chunk_count ?? '—'} chunks</span>
+                      </div>
+                      <StatusDot status={doc.status} />
+                      <span className="kb-page-doc-status">{doc.status}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -322,6 +377,15 @@ function IngestModal({ onClose, onSubmit, uploading, error }) {
         </div>
       </div>
     </div>
+  )
+}
+
+function KBIcon({ size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+    </svg>
   )
 }
 
