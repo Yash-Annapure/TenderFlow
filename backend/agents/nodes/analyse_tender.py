@@ -124,7 +124,7 @@ def analyse_tender(state: TenderState) -> dict:
     try:
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=3000,
+            max_tokens=8192,
             system=_SYSTEM_PROMPT,
             tools=[_ANALYSE_TOOL],
             tool_choice={"type": "tool", "name": "analyse_tender"},
@@ -139,6 +139,12 @@ def analyse_tender(state: TenderState) -> dict:
             "status": STATUS_ANALYSING,
             "error_message": str(e),
         }
+
+    logger.info(
+        f"[analyse_tender] stop_reason={response.stop_reason} "
+        f"output_tokens={response.usage.output_tokens} "
+        f"blocks={[b.type for b in response.content]}"
+    )
 
     analysis: dict = {}
     for block in response.content:

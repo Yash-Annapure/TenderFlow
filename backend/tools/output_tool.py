@@ -134,7 +134,7 @@ def _add_cover(doc: Document, state: dict) -> None:
 def _add_readiness_assessment(doc: Document, state: dict) -> None:
     doc.add_heading("Readiness Assessment", level=1)
 
-    # Score table
+    # Score summary table
     score_rows = [
         ("Primary Score (Track Record + Expertise + Methodology)", state.get("primary_score_total", 0.0)),
         ("Compliance Coverage", state.get("compliance_score", 0.0)),
@@ -161,6 +161,36 @@ def _add_readiness_assessment(doc: Document, state: dict) -> None:
 
     doc.add_paragraph()
 
+    # Module breakdown table (M1-M5)
+    primary_scores = state.get("primary_scores", {})
+    if primary_scores:
+        doc.add_heading("Primary Score Breakdown", level=2)
+        _MODULE_LABELS = {
+            "M1_track_record": "Track Record — past project similarity",
+            "M2_expertise_depth": "Expertise Depth — domain & regulatory coverage",
+            "M3_methodology_fit": "Methodology Fit — approach alignment",
+            "M4_delivery_credibility": "Delivery Credibility — team CV match",
+            "M5_pricing": "Pricing Proxy — budget competitiveness",
+        }
+        mod_table = doc.add_table(rows=1, cols=3)
+        mod_table.style = "Light Shading Accent 1"
+        mhdr = mod_table.rows[0].cells
+        mhdr[0].text = "Module"
+        mhdr[1].text = "Score"
+        mhdr[2].text = "Band"
+        for c in mhdr:
+            for run in c.paragraphs[0].runs:
+                run.bold = True
+        for key, label in _MODULE_LABELS.items():
+            score = primary_scores.get(key)
+            if score is None:
+                continue
+            mrow = mod_table.add_row().cells
+            mrow[0].text = label
+            mrow[1].text = f"{score:.0f} / 100"
+            mrow[2].text = _score_band(score)
+        doc.add_paragraph()
+
     # Score justifications
     justifications = state.get("score_justifications", {})
     if justifications:
@@ -170,17 +200,28 @@ def _add_readiness_assessment(doc: Document, state: dict) -> None:
             p.add_run(f"{module}:  ").bold = True
             p.add_run(justification)
 
-    # Action Items (gap flags)
+    # Action Items — gap flags + LOW-confidence sections
     doc.add_heading("Action Items", level=2)
-    gap_sections = [s for s in state.get("sections", []) if s.get("gap_flag")]
+    sections = state.get("sections", [])
+    gap_sections   = [s for s in sections if s.get("gap_flag")]
+    low_no_gap     = [s for s in sections if s.get("confidence") == "LOW" and not s.get("gap_flag")]
 
-    if gap_sections:
+    if gap_sections or low_no_gap:
         for s in gap_sections:
             p = doc.add_paragraph(style="List Bullet")
             run = p.add_run(f"[{s['section_name']}]  ")
             run.bold = True
             run.font.color.rgb = _WARN_COLOUR
             p.add_run(s["gap_flag"])
+        for s in low_no_gap:
+            p = doc.add_paragraph(style="List Bullet")
+            run = p.add_run(f"[{s['section_name']}]  ")
+            run.bold = True
+            run.font.color.rgb = _WARN_COLOUR
+            p.add_run(
+                "Low-confidence draft — KB content found via fallback retrieval only. "
+                "Review and supplement with project-specific evidence."
+            )
     else:
         doc.add_paragraph("No critical knowledge-base gaps identified for this tender.")
 

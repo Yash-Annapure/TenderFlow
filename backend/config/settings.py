@@ -18,8 +18,17 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_anon_key: str
     supabase_service_role_key: str
-    # Transaction-mode pooler URL required for langgraph-checkpoint-postgres
+    # Transaction-mode pooler URL for general use
     supabase_db_url: str
+    # Session-mode pooler URL for LangGraph PostgresSaver (port 5432)
+    # Get from Supabase Dashboard → Settings → Database → Session mode
+    # Falls back to transaction-mode URL if not set.
+    supabase_db_url_session: str = ""
+
+    @property
+    def langgraph_db_url(self) -> str:
+        """Best available DB URL for LangGraph checkpointing (session-mode preferred)."""
+        return self.supabase_db_url_session or self.supabase_db_url
 
     # ── App ───────────────────────────────────────────────────────────────────
     app_env: str = "development"

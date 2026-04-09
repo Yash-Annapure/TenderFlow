@@ -126,6 +126,11 @@ def ingest_document(
         model = get_model_for_doc_type(doc_type)
         logger.info(f"[ingest] Enriching {filename} with {model}")
         enrichment = _enrich_document(raw_text, doc_type)
+        if not enrichment:
+            logger.warning(
+                f"[ingest] Enrichment returned empty for {filename} — "
+                f"proceeding with no metadata (embedding-only retrieval)"
+            )
 
         # ── 4. Guard ──────────────────────────────────────────────────────────
         logger.info(f"[ingest] Running integrity guard on {filename}")

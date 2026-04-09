@@ -168,8 +168,8 @@ def _layer1_structural(doc_type: str, enrichment: dict) -> list[GuardFlag]:
             flags.append(
                 GuardFlag(
                     layer=1,
-                    severity="BLOCK",
-                    message=f"Required enrichment field '{f}' is missing or null",
+                    severity="WARN",
+                    message=f"Required enrichment field '{f}' is missing or null — document ingested but metadata filtering will be limited",
                     field=f,
                 )
             )
@@ -243,11 +243,14 @@ def _layer2_provenance(enrichment: dict, raw_text: str) -> list[GuardFlag]:
     prompt = (
         "You are verifying that factual claims extracted from a document are supported "
         "by the source text.\n\n"
-        f"Source text (first 3000 chars):\n<source>\n{raw_text[:3000]}\n</source>\n\n"
+        f"Source text (first 8000 chars):\n<source>\n{raw_text[:8000]}\n</source>\n\n"
         f"Extracted claims to verify:\n{json.dumps(claims, indent=2)}\n\n"
-        "For each claim that CANNOT be found in or reasonably inferred from the source, "
-        "return a JSON array: [{\"claim\": \"...\", \"reason\": \"...\"}]\n"
-        "If all claims are verified, return: []"
+        "Flag ONLY claims that are clearly fabricated or wildly inconsistent with the source. "
+        "Do NOT flag claims that could plausibly appear later in the document or are "
+        "reasonable inferences from stated context (e.g. a duration derived from stated dates, "
+        "a total derived from line items). "
+        "Return a JSON array of genuinely problematic claims only: [{\"claim\": \"...\", \"reason\": \"...\"}]\n"
+        "If all claims are plausible, return: []"
     )
 
     try:
