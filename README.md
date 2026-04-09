@@ -27,6 +27,26 @@ Every tool node also writes a **checkpoint** to Supabase (PostgresSaver) — the
 
 ## How It Works
 
+### Draft view
+
+<img width="860" height="391" alt="draft" src="https://github.com/user-attachments/assets/3dde9e3c-9a11-4dce-acbf-190524f98131" />
+
+*Initial draft — each section auto-assembled from knowledge base chunks*
+
+### UI split view
+
+<img width="860" height="391" alt="ui split" src="https://github.com/user-attachments/assets/ec65954c-8704-487c-aa78-94eb3191f3ed" />
+
+*Split pane — tender document on the left, editable draft on the right*
+
+### Entire review view
+
+<img width="860" height="395" alt="entire review" src="https://github.com/user-attachments/assets/408d0256-35f7-41f5-8cf3-1deebe30c329" />
+
+*Full review — all sections with confidence scores, gap flags, and feedback input*
+
+---
+
 ### 1. Knowledge Base Ingestion
 
 Before a tender is processed, Meridian's internal documents are ingested via a 6-step pipeline:
@@ -50,6 +70,7 @@ Before a tender is processed, Meridian's internal documents are ingested via a 6
 | `company_profile` | Claude Haiku 4.5 | Plain fact sheet — names, numbers, certifications |
 
 KB directory layout:
+
 ```
 kb/
   company/        → company_profile
@@ -89,6 +110,7 @@ LangGraph pauses the graph at `human_review` using `interrupt_before`. The front
 - Request another round (up to 3 iterations)
 
 The API resumes the graph via:
+
 ```python
 graph.update_state(config, {user_edits, user_feedback, hitl_iteration})
 graph.invoke(None, config)
@@ -184,6 +206,7 @@ uv run uvicorn main:app --reload
 ```
 
 Run the Supabase migration once:
+
 ```sql
 -- paste contents of backend/db/migrations/001_initial_schema.sql into Supabase SQL Editor
 ```
@@ -216,6 +239,3 @@ bulk_ingest_kb_directory("../Knowledge Base/kb")
 | `SUPABASE_SERVICE_KEY` | Supabase service role key (admin writes) |
 | `SUPABASE_DB_URL` | PostgreSQL connection string (transaction-mode pooler) |
 | `MAX_HITL_ITERATIONS` | Max human review rounds (default: 3) |
-
-
-PPT Link- https://www.canva.com/design/DAHGTZZuv7I?ui=eyJLIjp7IkEiOiI0NWU4NzU0ZC03ODQxLTQ4YjYtYjBjMi0wYjFkYmYwOTE3MjEifX0
