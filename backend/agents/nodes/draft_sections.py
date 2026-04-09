@@ -27,6 +27,7 @@ Updates TenderState:
 import json
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import anthropic
@@ -60,34 +61,41 @@ def draft_sections(state: TenderState) -> dict:
     logger.info(f"[draft_sections] Drafting {len(state['sections'])} sections")
 
     client = _get_client()
-    updated_sections = []
+    retrieved_chunks = state.get("retrieved_chunks", {})
+    tender_excerpt = state.get("tender_text", "")[:2000]
 
-    for section in state["sections"]:
+    def _draft_section_task(section: dict) -> dict:
         section_id = section["section_id"]
-        chunks = state.get("retrieved_chunks", {}).get(section_id, [])
+        chunks = retrieved_chunks.get(section_id, [])
+        updated = dict(section)
 
         if not chunks:
-            updated = dict(section)
             updated["draft_text"] = INSUFFICIENT_CONTEXT_TEMPLATE.format(
                 section_name=section["section_name"],
                 doc_types=", ".join(section.get("doc_types_needed", ["relevant"])),
             )
             updated["confidence"] = "LOW"
-            updated_sections.append(updated)
-            continue
+            return updated
 
         context = "\n\n".join(
             f"[{c.get('doc_type', 'doc')} — {c.get('source_name', '')}]\n{c['chunk_text']}"
             for c in chunks
         )
         sources = list({c.get("source_name", "") for c in chunks if c.get("source_name")})
-
-        draft_text = _draft_one_section(client, section, context, state.get("tender_text", "")[:2000])
-
-        updated = dict(section)
-        updated["draft_text"] = draft_text
+        updated["draft_text"] = _draft_one_section(client, section, context, tender_excerpt)
         updated["sources_used"] = sources
-        updated_sections.append(updated)
+        return updated
+
+    # Draft all sections in parallel — turns N×4s sequential into ~4s total
+    updated_sections_map: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {executor.submit(_draft_section_task, s): s["section_id"] for s in state["sections"]}
+        for future in as_completed(futures):
+            result = future.result()
+            updated_sections_map[result["section_id"]] = result
+
+    # Preserve original section order
+    updated_sections = [updated_sections_map[s["section_id"]] for s in state["sections"]]
 
     # Quality scoring
     compliance_score = _score_compliance(updated_sections, state.get("compliance_checklist", []))
@@ -96,18 +104,11 @@ def draft_sections(state: TenderState) -> dict:
     primary_total = state.get("primary_score_total", 0.0)
     final_score = primary_total * 0.60 + quality_score * 0.40
 
-    justifications = {
-        "Primary Score": (
-            f"{primary_total:.1f}/100 — weighted aggregate of Track Record, Expertise Depth, "
-            "Methodology Fit, Delivery Credibility, and Pricing Competitiveness"
-        ),
-        "Compliance Coverage": f"{compliance_score:.1f}/100 — mandatory requirement coverage across all sections",
-        "Robustness Index": f"{robustness_score:.1f}/100 — density of quantified claims and named project references",
-        "Final Score": (
-            f"{final_score:.1f}/100 — Primary (60%) + Quality (40%) weighted composite. "
-            f"Band: {_band(final_score)}"
-        ),
-    }
+    primary_scores = state.get("primary_scores", {})
+    justifications = _build_justifications(
+        updated_sections, primary_scores, primary_total,
+        compliance_score, robustness_score, final_score,
+    )
 
     logger.info(f"[draft_sections] Final score: {final_score:.1f} ({_band(final_score)})")
 
@@ -131,23 +132,23 @@ def _draft_one_section(
     tender_excerpt: str,
 ) -> str:
     requirements_text = "\n".join(f"- {r}" for r in section.get("requirements", []))
-    word_target = section.get("word_count_target", 500)
+    word_target = min(section.get("word_count_target", 250), 300)
 
     try:
         response = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=1400,
+            max_tokens=700,
             system=_SYSTEM_PROMPT,
             messages=[
                 {
                     "role": "user",
                     "content": (
                         f"Section to draft: {section['section_name']}\n"
-                        f"Target length: ~{word_target} words\n\n"
+                        f"STRICT limit: {word_target} words maximum. Be dense and precise — cut any sentence that does not directly address a requirement.\n\n"
                         f"Requirements from the tender:\n{requirements_text}\n\n"
-                        f"Tender context (excerpt):\n{tender_excerpt[:500]}\n\n"
-                        f"Relevant knowledge base content:\n<context>\n{context[:3500]}\n</context>\n\n"
-                        "Draft the section now:"
+                        f"Tender context (excerpt):\n{tender_excerpt[:300]}\n\n"
+                        f"Relevant knowledge base content:\n<context>\n{context[:2500]}\n</context>\n\n"
+                        "Draft the section now (hard stop at word limit):"
                     ),
                 }
             ],
@@ -156,6 +157,102 @@ def _draft_one_section(
     except Exception as e:
         logger.error(f"[draft_sections] Sonnet call failed for '{section['section_name']}': {e}")
         return f"[DRAFT ERROR: {e}]"
+
+
+# ── Justification builder ─────────────────────────────────────────────────────
+
+_MODULE_LABELS = {
+    "M1_track_record": "Track Record",
+    "M2_expertise_depth": "Expertise Depth",
+    "M3_methodology_fit": "Methodology Fit",
+    "M4_delivery_credibility": "Delivery Credibility",
+    "M5_pricing": "Pricing Proxy",
+}
+
+
+def _build_justifications(
+    sections: list[dict],
+    primary_scores: dict,
+    primary_total: float,
+    compliance_score: float,
+    robustness_score: float,
+    final_score: float,
+) -> dict[str, str]:
+    # ── Primary: show every module score ──────────────────────────────────────
+    module_parts = [
+        f"{_MODULE_LABELS.get(k, k)} {v:.0f}"
+        for k, v in primary_scores.items()
+        if k in _MODULE_LABELS
+    ]
+    real_modules = {k: v for k, v in primary_scores.items() if k != "M5_pricing"}
+    if real_modules:
+        best_k = max(real_modules, key=real_modules.get)
+        worst_k = min(real_modules, key=real_modules.get)
+        strength_line = (
+            f"Strongest module: {_MODULE_LABELS.get(best_k, best_k)} "
+            f"({real_modules[best_k]:.0f}/100). "
+            f"Weakest: {_MODULE_LABELS.get(worst_k, worst_k)} "
+            f"({real_modules[worst_k]:.0f}/100)."
+        )
+    else:
+        strength_line = ""
+    primary_just = (
+        f"{primary_total:.1f}/100 — "
+        + (", ".join(module_parts) + ". " if module_parts else "")
+        + strength_line
+    )
+
+    # ── Compliance: interpret the score ───────────────────────────────────────
+    if compliance_score >= 80:
+        compliance_note = "Strong — mandatory tender requirements are well covered across drafted sections."
+    elif compliance_score >= 65:
+        compliance_note = "Moderate — most mandatory requirements addressed; review checklist for gaps before submission."
+    else:
+        compliance_note = "Needs work — significant mandatory requirements may be missing. Cross-check the compliance checklist section by section."
+    compliance_just = f"{compliance_score:.1f}/100 — {compliance_note}"
+
+    # ── Robustness: section confidence breakdown ───────────────────────────────
+    high_conf = [s["section_name"] for s in sections if s.get("confidence") == "HIGH"]
+    low_conf  = [s["section_name"] for s in sections if s.get("confidence") == "LOW"]
+    total = len(sections) or 1
+    grounding_line = (
+        f"{len(high_conf)}/{total} sections fully grounded in the knowledge base"
+        + (f" ({', '.join(high_conf[:3])}{'...' if len(high_conf) > 3 else ''})." if high_conf else ".")
+    )
+    if low_conf:
+        grounding_line += (
+            f" {len(low_conf)} section(s) drafted with limited KB support "
+            f"({', '.join(low_conf[:3])}{'...' if len(low_conf) > 3 else ''}) — "
+            "supplement with specific figures, client names, and measurable outcomes."
+        )
+    if robustness_score >= 70:
+        robust_note = f"Good evidence density. {grounding_line}"
+    elif robustness_score >= 50:
+        robust_note = f"Moderate evidence density. {grounding_line}"
+    else:
+        robust_note = f"Low evidence density — drafts lack quantified claims. {grounding_line}"
+    robustness_just = f"{robustness_score:.1f}/100 — {robust_note}"
+
+    # ── Final: readiness verdict ───────────────────────────────────────────────
+    quality_composite = compliance_score * 0.55 + robustness_score * 0.45
+    if final_score >= 75:
+        verdict = "Ready for human review and final polish before submission."
+    elif final_score >= 60:
+        verdict = "Usable first draft — targeted strengthening recommended. See Action Items."
+    else:
+        verdict = "Significant gaps remain. Address Action Items before submission."
+    final_just = (
+        f"{final_score:.1f}/100 ({_band(final_score)}) — "
+        f"Primary Score {primary_total:.0f} × 60% + Quality Score {quality_composite:.0f} × 40%. "
+        + verdict
+    )
+
+    return {
+        "Primary Score": primary_just,
+        "Compliance Coverage": compliance_just,
+        "Robustness Index": robustness_just,
+        "Final Score": final_just,
+    }
 
 
 # ── Quality scoring ────────────────────────────────────────────────────────────
