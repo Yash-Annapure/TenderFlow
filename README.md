@@ -210,7 +210,7 @@ bulk_ingest_kb_directory("../Knowledge Base/kb")
 | Variable | Description |
 |----------|-------------|
 | `ANTHROPIC_API_KEY` | Anthropic API key |
-| `VOYAGE_API_KEY` | Voyage AI API key |
+| `OPENAI_API_KEY` | Open AI API key |
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_ANON_KEY` | Supabase anon key |
 | `SUPABASE_SERVICE_KEY` | Supabase service role key (admin writes) |
