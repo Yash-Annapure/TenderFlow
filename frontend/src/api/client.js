@@ -56,6 +56,12 @@ export function openEventStream(tenderId, onEvent, onEnd) {
   return es
 }
 
+export async function fetchHistory(limit = 20) {
+  const res = await fetch(`${BASE}/tender/history?limit=${limit}`)
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
 export async function listKBDocuments() {
   const res = await fetch(`${BASE}/kb/documents`)
   if (!res.ok) throw new Error(await res.text())

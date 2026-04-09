@@ -111,6 +111,28 @@ async def start_tender(
     return TenderJobResponse(tender_id=tender_id, status=STATUS_PENDING, tender_filename=filename)
 
 
+@router.get("/history")
+def get_history(limit: int = 20):
+    """
+    Return recent tender jobs ordered by updated_at descending.
+    Used by the frontend to hydrate history on page load.
+    Only returns jobs that have progressed beyond pending.
+    """
+    supabase = get_supabase_admin()
+    result = (
+        supabase.table("tender_jobs")
+        .select(
+            "id, tender_filename, status, score_json, sections_json, "
+            "output_path, hitl_iteration, error_msg, updated_at, created_at"
+        )
+        .not_.eq("status", STATUS_PENDING)
+        .order("updated_at", desc=True)
+        .limit(max(1, min(limit, 50)))
+        .execute()
+    )
+    return result.data
+
+
 @router.get("/{tender_id}/status", response_model=TenderJobResponse)
 def get_tender_status(tender_id: str):
     """Poll job status. When status is 'awaiting_review', sections_json is populated."""

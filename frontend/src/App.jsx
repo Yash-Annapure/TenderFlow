@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import Sidebar from './components/Sidebar'
 import ChatView from './components/ChatView'
 import ReviewPanel from './components/ReviewPanel'
-import { startTender, openEventStream } from './api/client.js'
+import { startTender, openEventStream, fetchHistory } from './api/client.js'
 import {
   emptyLog, addOps,
   buildPipelineEstimates,
@@ -53,6 +53,37 @@ export default function App() {
       return [entry, ...prev]
     })
   }, [])
+
+  // Load persisted history from Supabase on mount.
+  // Merges with any locally-archived sessions (deduped by id).
+  useEffect(() => {
+    fetchHistory()
+      .then(jobs => {
+        setHistory(prev => {
+          const existingIds = new Set(prev.map(h => h.id))
+          const fromDb = jobs
+            .filter(j => !existingIds.has(j.id))
+            .map(j => ({
+              id: j.id,
+              job: {
+                tender_id:      j.id,
+                tender_filename: j.tender_filename,
+                status:         j.status,
+                score_json:     j.score_json,
+                sections_json:  j.sections_json,
+                output_path:    j.output_path,
+                hitl_iteration: j.hitl_iteration || 0,
+                error_msg:      j.error_msg,
+              },
+              messages: _buildMessagesFromJob(j),
+              timestamp: new Date(j.updated_at || j.created_at || Date.now()),
+            }))
+          // Merge: local (fresher, current session) first, then Supabase entries
+          return [...prev, ...fromDb]
+        })
+      })
+      .catch(err => console.warn('[history] Supabase load failed:', err))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleJobStarted = useCallback((newJob, filename) => {
     archiveCurrent()           // snapshot previous session before wiping
@@ -230,6 +261,42 @@ export default function App() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Reconstruct a synthetic chat-message list from a persisted job record.
+ * Used when hydrating history from Supabase (real messages not stored in DB).
+ */
+function _buildMessagesFromJob(job) {
+  const msgs = [
+    { id: 'upload', type: 'user', text: `Uploaded tender: ${job.tender_filename || 'tender'}` },
+  ]
+  if (job.score_json) {
+    msgs.push({
+      id: 'scored',
+      type: 'agent-done',
+      heading: 'Draft Complete — Review Required',
+      text: `Final score: ${job.score_json?.final_score?.toFixed(1) ?? '—'}/100. Review and edit each section below.`,
+      score: job.score_json,
+    })
+  }
+  if (job.status === 'done') {
+    msgs.push({
+      id: 'finalised',
+      type: 'done',
+      heading: 'Tender Response Complete',
+      text: 'Your tender response has been generated and is ready to download.',
+      tenderId: job.id,
+    })
+  }
+  if (job.status === 'error') {
+    msgs.push({
+      id: 'err',
+      type: 'error',
+      text: job.error_msg || 'An error occurred during processing.',
+    })
+  }
+  return msgs
+}
 
 function LandingView({ onJobStarted }) {
   const [dragging,  setDragging]  = useState(false)
