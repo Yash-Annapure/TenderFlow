@@ -1,0 +1,112 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #0d0d0d;
+  --sidebar-bg: #111111;
+  --surface: #1a1a1a;
+  --surface-hover: #222222;
+  --border: #2a2a2a;
+  --border-light: #333333;
+  --text: #ececf1;
+  --text-muted: #8e8ea0;
+  --text-dim: #565869;
+  --accent: #6366f1;
+  --accent-hover: #4f52d9;
+  --accent-dim: rgba(99, 102, 241, 0.15);
+  --green: #10a37f;
+  --green-dim: rgba(16, 163, 127, 0.15);
+  --yellow: #f59e0b;
+  --yellow-dim: rgba(245, 158, 11, 0.15);
+  --red: #ef4444;
+  --red-dim: rgba(239, 68, 68, 0.15);
+  --radius: 8px;
+  --radius-lg: 12px;
+  --sidebar-w: 260px;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* ── Animation tokens ────────────────────────────────────────────────────── */
+:root {
+  --ease-out-expo:  cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring:    cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in-out:    cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast:       120ms;
+  --dur-base:       220ms;
+  --dur-slow:       380ms;
+  --glow-accent:    0 0 0 3px rgba(99, 102, 241, 0.18);
+  --surface-raised: #161616;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}
+
+button {
+  font-family: var(--font);
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+input, textarea {
+  font-family: var(--font);
+  outline: none;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+@keyframes fadeIn    { from { opacity: 0 }                                    to { opacity: 1 } }
+@keyframes fadeOut   { from { opacity: 1; pointer-events: all }               to { opacity: 0; pointer-events: none } }
+@keyframes slideUp   { from { opacity: 0; transform: translateY(20px) }       to { opacity: 1; transform: translateY(0) } }
+@keyframes slideInUp { from { opacity: 0; transform: translateY(14px) }       to { opacity: 1; transform: translateY(0) } }
+@keyframes slideInLeft { from { opacity: 0; transform: translateX(-10px) }    to { opacity: 1; transform: translateX(0) } }
+@keyframes expandDown {
+  from { max-height: 0; opacity: 0 }
+  to   { max-height: 400px; opacity: 1 }
+}
+@keyframes spinRing  { to { transform: rotate(360deg) } }
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 4px rgba(99,102,241,0.6) }
+  50%       { box-shadow: 0 0 12px rgba(99,102,241,0.9) }
+}
+@keyframes dotTrail {
+  0%, 100% { opacity: 0.25; transform: scale(0.7) }
+  50%      { opacity: 1;    transform: scale(1) }
+}
+@keyframes borderGlow {
+  0%, 100% { border-color: var(--border-light) }
+  50%      { border-color: rgba(99, 102, 241, 0.4) }
+}
+@keyframes barSlide  { from { width: 0 }   to { width: var(--bar-target, 100%) } }
+@keyframes shimmer   {
+  0%   { background-position: 200% center }
+  100% { background-position: -200% center }
+}

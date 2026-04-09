@@ -1,0 +1,92 @@
+<h2>Design Direction — Which vibe fits TenderFlow?</h2>
+<p class="subtitle">All three keep your dark theme and indigo accent. The difference is in motion personality and visual density.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="precision" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0d0d0d;border-bottom:1px solid #1e1e2e;padding:20px;font-family:'Courier New',monospace;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+        <div style="width:24px;height:24px;background:#6366f1;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;">TF</div>
+        <span style="color:#ececf1;font-size:13px;font-weight:600;font-family:Inter,sans-serif;">TenderFlow</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <div style="height:2px;background:#6366f1;border-radius:2px;width:60%;transition:width 0.3s;"></div>
+        <div style="display:flex;gap:6px;">
+          <div style="font-size:9px;color:#6366f1;border:1px solid #6366f155;padding:2px 8px;border-radius:4px;">analyse_tender</div>
+          <div style="font-size:9px;color:#6366f1;border:1px solid #6366f133;padding:2px 8px;border-radius:4px;opacity:0.5;">retrieve_context</div>
+        </div>
+        <div style="height:1px;background:#1e1e2e;margin:4px 0;"></div>
+        <div style="font-size:10px;color:#565869;font-family:'Courier New',monospace;letter-spacing:0.05em;">● Extracting sections...</div>
+        <div style="font-size:10px;color:#565869;font-family:'Courier New',monospace;letter-spacing:0.05em;opacity:0.5;">↳ compliance checklist</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Precision Dark</h3>
+      <p>Linear / Vercel energy. Micro-animations, hair-thin borders, monospace accents. Tool calls feel like terminal output — live, precise, minimal glow.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="motion" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:linear-gradient(135deg,#0d0d0d 0%,#0f0f1a 100%);border-bottom:1px solid #2a2040;padding:20px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+        <div style="width:28px;height:28px;background:linear-gradient(135deg,#6366f1,#818cf8);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;box-shadow:0 0 20px #6366f166;">TF</div>
+        <span style="color:#ececf1;font-size:13px;font-weight:700;font-family:Inter,sans-serif;letter-spacing:-0.5px;">TenderFlow</span>
+      </div>
+      <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:8px;height:8px;border-radius:50%;background:#6366f1;box-shadow:0 0 8px #6366f1aa;"></div>
+          <span style="font-size:11px;color:#ececf1;font-weight:500;">Analysing Tender</span>
+        </div>
+        <div style="height:3px;background:#1a1a2e;border-radius:2px;overflow:hidden;">
+          <div style="height:100%;width:65%;background:linear-gradient(90deg,#6366f1,#a5b4fc);border-radius:2px;"></div>
+        </div>
+        <div style="font-size:10px;color:#818cf8;">Extracting 6 sections · compliance matrix</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Motion Rich</h3>
+      <p>Raycast / Framer energy. Glassmorphism panels, gradient glows, expressive spring animations. Tool calls have presence — pulsing orbs, progress bars, animated cards.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="frontier" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0d0d0d;border-bottom:1px solid #222;padding:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:6px;height:6px;border-radius:50%;background:#10a37f;box-shadow:0 0 6px #10a37faa;"></div>
+          <span style="color:#ececf1;font-size:12px;font-weight:500;font-family:Inter,sans-serif;">Processing</span>
+        </div>
+        <span style="font-size:10px;color:#565869;">2 of 4</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <div style="background:#111;border:1px solid #222;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;">
+          <div style="width:16px;height:16px;border-radius:4px;background:#6366f122;border:1px solid #6366f144;display:flex;align-items:center;justify-content:center;">
+            <div style="width:6px;height:6px;border-radius:50%;background:#6366f1;"></div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:#ececf1;font-weight:500;margin-bottom:2px;">analyse_tender</div>
+            <div style="font-size:10px;color:#565869;">completed · 0.8s</div>
+          </div>
+          <div style="margin-left:auto;font-size:10px;color:#10a37f;">✓</div>
+        </div>
+        <div style="background:#111;border:1px solid #6366f133;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;">
+          <div style="width:16px;height:16px;border-radius:4px;background:#6366f133;border:1px solid #6366f166;display:flex;align-items:center;justify-content:center;">
+            <div style="width:6px;height:6px;border-radius:50%;background:#6366f1;animation:none;"></div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:#ececf1;font-weight:500;margin-bottom:2px;">retrieve_context</div>
+            <div style="font-size:10px;color:#6366f1;">running · 1.2s</div>
+          </div>
+          <div style="margin-left:auto;width:16px;height:16px;border:2px solid #6366f133;border-top-color:#6366f1;border-radius:50%;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Frontier / OpenAI-style</h3>
+      <p>ChatGPT / Claude.ai energy. Clean white-on-dark cards, tool calls as structured step lists with completion states, smooth slide-in animations, zero clutter.</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px;">Click to select — or select multiple if you want a blend.</p>

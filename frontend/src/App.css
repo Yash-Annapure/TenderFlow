@@ -1,0 +1,217 @@
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+.app-layout {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-main {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Landing ────────────────────────────────────────────────────────────── */
+.landing {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  overflow-y: auto;
+}
+
+.landing-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  max-width: 600px;
+  width: 100%;
+  text-align: center;
+}
+
+.landing-badge {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 100px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.landing-title {
+  font-size: 56px;
+  font-weight: 700;
+  letter-spacing: -2px;
+  background: linear-gradient(135deg, #fff 0%, #9ca3af 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1.1;
+}
+
+.landing-sub {
+  font-size: 15px;
+  color: var(--text-muted);
+  line-height: 1.7;
+  max-width: 480px;
+}
+
+/* ── Drop Zone ──────────────────────────────────────────────────────────── */
+.drop-zone {
+  width: 100%;
+  min-height: 160px;
+  border: 2px dashed var(--border-light);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, transform 0.15s var(--ease-out-expo, cubic-bezier(0.16,1,0.3,1));
+}
+
+.drop-zone:hover {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.drop-zone--active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  transform: scale(1.015);
+  animation: none;
+}
+
+.drop-zone--uploading {
+  cursor: wait;
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  animation: none;
+}
+
+.drop-zone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-muted);
+  padding: 20px;
+}
+
+.drop-zone-text {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.drop-zone-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+}
+
+/* ── Pipeline steps display ─────────────────────────────────────────────── */
+.landing-pipeline {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  overflow-x: auto;
+  padding: 4px 2px 8px;
+  gap: 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  justify-content: center;
+}
+.landing-pipeline::-webkit-scrollbar { display: none; }
+
+.pipeline-step {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.pipeline-label {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-family: 'Courier New', monospace;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.pipeline-arrow {
+  width: 18px;
+  height: 1px;
+  background: var(--border-light);
+  position: relative;
+  flex-shrink: 0;
+}
+
+.pipeline-arrow::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: -3px;
+  border: 3px solid transparent;
+  border-left: 4px solid var(--border-light);
+}
+
+.landing-error {
+  color: var(--red);
+  font-size: 13px;
+  background: var(--red-dim);
+  border: 1px solid var(--red);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  width: 100%;
+}
+
+/* ── Spinner ────────────────────────────────────────────────────────────── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  animation: spin 0.8s linear infinite;
+  color: var(--accent);
+}
+
+/* ── Landing stagger entrance ───────────────────────────────────────────── */
+.landing-stagger-1,
+.landing-stagger-2,
+.landing-stagger-3,
+.landing-stagger-4,
+.landing-stagger-5 {
+  animation: slideInUp var(--dur-slow, 380ms) var(--ease-out-expo, cubic-bezier(0.16,1,0.3,1)) both;
+  opacity: 0;
+}
+
+.landing-stagger-1 { animation-delay: 50ms }
+.landing-stagger-2 { animation-delay: 120ms }
+.landing-stagger-3 { animation-delay: 190ms }
+.landing-stagger-4 { animation-delay: 260ms }
+.landing-stagger-5 { animation-delay: 330ms }
+
+/* Drop zone gets both: entrance stagger + idle glow after entrance */
+.drop-zone.landing-stagger-4 {
+  animation:
+    slideInUp var(--dur-slow, 380ms) var(--ease-out-expo, cubic-bezier(0.16,1,0.3,1)) 260ms both,
+    borderGlow 3s ease 1.2s infinite;
+}
+
+/* ── View enter animations ───────────────────────────────────────────────── */
+.landing,
+.chat-view,
+.review-layout {
+  animation: slideInUp var(--dur-slow, 380ms) var(--ease-out-expo, cubic-bezier(0.16,1,0.3,1)) both;
+}

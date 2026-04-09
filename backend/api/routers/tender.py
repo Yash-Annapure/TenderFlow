@@ -7,20 +7,26 @@ Endpoints:
   GET  /tender/{id}/download  Stream the generated DOCX file
 """
 
+import asyncio
+import json
 import logging
 import threading
 import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from agents.graph import get_graph, get_thread_config
 from agents.state import (
+    STATUS_ANALYSING,
     STATUS_AWAITING_REVIEW,
     STATUS_DONE,
+    STATUS_DRAFTING,
     STATUS_ERROR,
+    STATUS_FINALISING,
     STATUS_PENDING,
+    STATUS_RETRIEVING,
     TenderState,
 )
 from api.schemas.tender_schemas import TenderJobResponse
@@ -153,6 +159,105 @@ def download_tender(tender_id: str):
     )
 
 
+@router.get("/{tender_id}/events")
+async def stream_events(tender_id: str):
+    """
+    SSE endpoint — streams tender job status updates to the frontend.
+    Emits a JSON event whenever the status changes.
+    Closes when status reaches awaiting_review, done, or error.
+    """
+    terminal = {STATUS_AWAITING_REVIEW, STATUS_DONE, STATUS_ERROR}
+
+    async def event_generator():
+        last_status = None
+        while True:
+            try:
+                supabase = get_supabase_admin()
+                result = await asyncio.to_thread(
+                    lambda: supabase.table("tender_jobs")
+                    .select("status, sections_json, score_json, output_path, error_msg, hitl_iteration")
+                    .eq("id", tender_id)
+                    .execute()
+                )
+                if not result.data:
+                    yield f"data: {json.dumps({'error': 'not_found'})}\n\n"
+                    return
+
+                job = result.data[0]
+                if job["status"] != last_status:
+                    last_status = job["status"]
+                    yield f"data: {json.dumps(job)}\n\n"
+
+                if job["status"] in terminal:
+                    return
+
+                await asyncio.sleep(1.0)
+            except Exception as e:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                return
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/reiterate-section")
+async def reiterate_section(body: dict):
+    """
+    Re-draft a single section using the already-configured Anthropic client.
+    Token-optimised: Haiku only, one section, targeted instruction.
+    No job state involved — purely a stateless AI call.
+
+    Request body: { section_name, requirements, current_draft, instruction, word_target }
+    Response:     { text, input_tokens, output_tokens }
+    """
+    import anthropic
+
+    section_name  = body.get("section_name", "")
+    requirements  = body.get("requirements", [])
+    current_draft = (body.get("current_draft") or "")[:2000]
+    instruction   = body.get("instruction", "")
+    word_target   = int(body.get("word_target", 500))
+
+    if not section_name or not instruction:
+        raise HTTPException(status_code=422, detail="section_name and instruction are required")
+
+    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    req_text = "\n".join(f"- {r}" for r in (requirements or [])[:6])
+
+    try:
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1200,
+            system=(
+                "You are drafting one section of a formal tender response for a professional consultancy. "
+                "Write clearly, be specific, justify claims with evidence. "
+                "Output only the revised section text — no commentary, no headings."
+            ),
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Section: {section_name}\n"
+                    f"Word target: ~{word_target} words\n"
+                    f"Requirements:\n{req_text}\n\n"
+                    f"Current draft:\n{current_draft}\n\n"
+                    f"Revision instruction: {instruction}\n\n"
+                    "Output the revised section text only."
+                ),
+            }],
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Anthropic call failed: {e}")
+
+    return {
+        "text":          response.content[0].text.strip(),
+        "input_tokens":  response.usage.input_tokens,
+        "output_tokens": response.usage.output_tokens,
+    }
+
+
 # ── Background graph runner ────────────────────────────────────────────────────
 
 def _run_graph(tender_id: str, initial_state: TenderState) -> None:
@@ -175,9 +280,20 @@ def _run_graph(tender_id: str, initial_state: TenderState) -> None:
         except Exception as e:
             logger.error(f"[tender] Failed to update job {tender_id}: {e}")
 
+    _NODE_STATUS = {
+        "analyse_tender": STATUS_ANALYSING,
+        "retrieve_context": STATUS_RETRIEVING,
+        "draft_sections": STATUS_DRAFTING,
+        "finalise": STATUS_FINALISING,
+    }
+
     try:
-        _update_job("analysing")
-        graph.invoke(initial_state, config)
+        _update_job(STATUS_ANALYSING)
+        for chunk in graph.stream(initial_state, config, stream_mode="updates"):
+            for node_name in chunk:
+                new_status = _NODE_STATUS.get(node_name)
+                if new_status:
+                    _update_job(new_status)
 
         # Check where the graph paused
         state_snapshot = graph.get_state(config)

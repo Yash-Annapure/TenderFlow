@@ -1,0 +1,249 @@
+/* ── Outer wrapper — dark canvas the page sits on ───────────────────────── */
+.docx-page-wrap {
+  flex: 1;
+  overflow-y: auto;
+  background: #1a1a1a;
+  padding: 32px 24px 48px;
+  display: flex;
+  justify-content: center;
+}
+
+/* ── The A4 page itself ─────────────────────────────────────────────────── */
+.docx-page {
+  background: #ffffff;
+  width: 100%;
+  max-width: 760px;
+  min-height: 800px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+  font-family: 'Calibri', 'Source Sans Pro', 'Segoe UI', Arial, sans-serif;
+  color: #1a1a1a;
+  font-size: 13.5px;
+  line-height: 1.65;
+  /* Prevent dark-theme CSS variables from bleeding into the white page */
+  isolation: isolate;
+}
+
+/* Force all text inside the page to the document colour,
+   overriding any dark-theme colour inheritance */
+.docx-page * {
+  color: inherit;
+}
+
+.docx-section-heading,
+.docx-section-num {
+  color: #1a5f8a !important;
+}
+
+.docx-section-body h1 { color: #1a5f8a !important; }
+.docx-section-body h2 { color: #1d3557 !important; }
+.docx-section-body h3 { color: #333333 !important; }
+.docx-section-body p,
+.docx-section-body li,
+.docx-section-body td,
+.docx-section-body code { color: #1a1a1a !important; }
+
+/* ── Cover block ────────────────────────────────────────────────────────── */
+.docx-cover {
+  background: #1d3557;
+  padding: 44px 56px 40px;
+  position: relative;
+}
+
+.docx-cover-category {
+  position: absolute;
+  top: 22px;
+  right: 28px;
+  font-size: 11.5px;
+  color: #a8c4e0;
+  font-style: italic;
+  letter-spacing: 0.04em;
+}
+
+.docx-cover-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.3;
+  margin: 0 0 16px;
+  letter-spacing: -0.2px;
+}
+
+.docx-cover-org {
+  font-size: 13px;
+  color: #a8c4e0;
+  font-style: italic;
+}
+
+/* ── Metadata row ───────────────────────────────────────────────────────── */
+.docx-meta-row {
+  display: flex;
+  align-items: baseline;
+  gap: 24px;
+  padding: 10px 56px;
+  background: #f0f4f8;
+  border-bottom: 1px solid #d0dae4;
+  font-size: 12px;
+}
+
+.docx-meta-label {
+  font-weight: 700;
+  color: #1a1a1a;
+  white-space: nowrap;
+}
+
+.docx-meta-value {
+  color: #444;
+}
+
+/* ── Body ───────────────────────────────────────────────────────────────── */
+.docx-body {
+  padding: 36px 56px 48px;
+}
+
+.docx-empty {
+  color: #999;
+  font-style: italic;
+  text-align: center;
+  margin-top: 40px;
+}
+
+/* ── Section ────────────────────────────────────────────────────────────── */
+.docx-section {
+  margin-bottom: 32px;
+  scroll-margin-top: 20px;
+  border-radius: 3px;
+  transition: background 0.2s;
+}
+
+.docx-section--active {
+  background: #fffbe6;
+  outline: 2px solid #f59e0b;
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.docx-section-heading {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: #1a5f8a;
+  border-bottom: 2px solid #1a5f8a;
+  padding-bottom: 5px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.docx-section-num {
+  color: #1a5f8a;
+  opacity: 0.6;
+  font-size: 14px;
+}
+
+/* ── Body content — mirrors the EBA PDF ────────────────────────────────── */
+.docx-section-body p {
+  text-align: justify;
+  margin-bottom: 10px;
+  hyphens: auto;
+}
+
+.docx-section-body h1 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1a5f8a;
+  margin: 16px 0 8px;
+}
+
+.docx-section-body h2 {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1d3557;
+  margin: 14px 0 6px;
+}
+
+.docx-section-body h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: #333;
+  margin: 12px 0 4px;
+}
+
+.docx-section-body ul,
+.docx-section-body ol {
+  margin: 8px 0 8px 24px;
+}
+
+.docx-section-body li {
+  margin-bottom: 4px;
+}
+
+.docx-section-body strong { font-weight: 700; }
+.docx-section-body em     { font-style: italic; }
+.docx-section-body code   { font-family: Consolas, monospace; font-size: 12px; background: #f4f4f4; padding: 1px 4px; border-radius: 2px; }
+
+/* ── Tables ─────────────────────────────────────────────────────────────── */
+.docx-section-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-size: 12.5px;
+}
+
+.docx-section-body thead tr {
+  background: #1d3557;
+  color: #ffffff;
+}
+
+.docx-section-body thead th {
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 600;
+  border: 1px solid #2a4a6e;
+}
+
+.docx-section-body tbody tr:nth-child(odd) {
+  background: #f7f9fc;
+}
+
+.docx-section-body tbody tr:nth-child(even) {
+  background: #ffffff;
+}
+
+.docx-section-body tbody td {
+  padding: 7px 12px;
+  border: 1px solid #d0dae4;
+  vertical-align: top;
+}
+
+/* ── Sources ─────────────────────────────────────────────────────────────── */
+.docx-sources {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #e8eef4;
+}
+
+.docx-sources-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.docx-source-tag {
+  font-size: 11px;
+  background: #eef4fb;
+  color: #1a5f8a;
+  border: 1px solid #c5d9eb;
+  border-radius: 3px;
+  padding: 1px 7px;
+}
+
+.docx-section-body .empty-section {
+  color: #aaa;
+  font-style: italic;
+}

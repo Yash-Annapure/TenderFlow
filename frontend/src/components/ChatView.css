@@ -1,0 +1,429 @@
+/* ── Chat shell ─────────────────────────────────────────────────────────── */
+.chat-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Top bar ────────────────────────────────────────────────────────────── */
+.chat-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--sidebar-bg);
+  flex-shrink: 0;
+}
+
+.chat-topbar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.chat-topbar-title span {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.chat-new-btn {
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  color: var(--text-muted);
+  border-radius: var(--radius);
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+}
+
+.chat-new-btn:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* ── History badge ──────────────────────────────────────────────────────── */
+.chat-history-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 100px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  color: var(--text-dim);
+}
+
+/* ── Status pills ───────────────────────────────────────────────────────── */
+.status-pill {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 100px;
+}
+
+.status-pill--analysing,
+.status-pill--retrieving,
+.status-pill--drafting,
+.status-pill--pending { background: var(--accent-dim); color: var(--accent); }
+.status-pill--awaiting_review { background: var(--yellow-dim); color: var(--yellow); }
+.status-pill--finalising { background: var(--yellow-dim); color: var(--yellow); }
+.status-pill--done { background: var(--green-dim); color: var(--green); }
+.status-pill--error { background: var(--red-dim); color: var(--red); }
+
+/* ── Messages area ──────────────────────────────────────────────────────── */
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── Individual message ─────────────────────────────────────────────────── */
+.msg {
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 8px 24px;
+}
+
+/* User message */
+.msg--user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.msg-bubble--user {
+  background: var(--accent-dim);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: var(--text);
+  border-radius: 18px 18px 4px 18px;
+  padding: 10px 16px;
+  font-size: 14px;
+  max-width: 80%;
+}
+
+/* Agent message */
+.msg--agent {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.msg-agent-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  width: 28px;
+  text-align: center;
+  padding-top: 2px;
+}
+
+.msg-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.msg-tool-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.msg-tool-fn {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.msg-heading {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.msg-text {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* Error message */
+.msg--error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--red-dim);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  font-size: 13px;
+  color: var(--red);
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.msg-error-icon {
+  font-size: 16px;
+}
+
+/* Download button */
+.download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  background: var(--green);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: opacity 0.15s;
+  width: fit-content;
+}
+
+.download-btn:hover { opacity: 0.85; color: #fff; }
+
+/* ── Tool pipeline ──────────────────────────────────────────────────────── */
+.msg--pipeline {
+  padding: 0 24px;
+}
+
+.tool-pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 672px;
+  width: 100%;
+}
+
+/* ── Tool card base ─────────────────────────────────────────────────────── */
+.tool-card {
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  position: relative;
+  animation: slideInUp var(--dur-base, 220ms) var(--ease-out-expo, cubic-bezier(0.16,1,0.3,1)) both;
+}
+
+.tool-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--card-border-color, transparent);
+  border-radius: 2px 0 0 2px;
+  transition: background 0.3s;
+}
+
+/* ── Card states ─────────────────────────────────────────────────────────── */
+.tool-card--pending {
+  background: #0f0f0f;
+  border-color: #1e1e1e;
+  opacity: 0.5;
+}
+
+.tool-card--active {
+  border-color: rgba(99, 102, 241, 0.2);
+}
+
+.tool-card--active::before {
+  box-shadow: 0 0 6px rgba(99, 102, 241, 0.5);
+}
+
+/* ── Card header ─────────────────────────────────────────────────────────── */
+.tool-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 14px 11px 14px;
+  cursor: default;
+}
+
+.tool-card--done .tool-card-header {
+  cursor: pointer;
+  align-items: center;
+}
+
+/* Two-row inner wrapper for name + desc */
+.tool-card-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tool-card-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.tool-card-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: 'SF Mono', ui-monospace, 'Cascadia Code', 'Consolas', 'Monaco', monospace;
+  letter-spacing: 0.015em;
+  line-height: 1.3;
+  -webkit-font-smoothing: antialiased;
+}
+
+.tool-card--pending .tool-card-name {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+/* Description sub-line (active state only) */
+.tool-card-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font);
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+.tool-card-dots {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.tool-card-dots span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+  animation: dotTrail 1.2s ease infinite;
+}
+
+.tool-card-elapsed {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  font-family: var(--font);
+}
+
+.tool-card-elapsed--active {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.tool-card-chevron {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* ── Card icons ──────────────────────────────────────────────────────────── */
+.tool-card-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tool-card-icon--done {
+  background: rgba(16, 163, 127, 0.15);
+  border: 1px solid rgba(16, 163, 127, 0.3);
+}
+
+.tool-card-icon--spinner {
+  border: 2px solid rgba(99, 102, 241, 0.15);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spinRing 0.7s linear infinite;
+}
+
+.tool-card-icon--pending {
+  background: #161616;
+  border: 1px solid #252525;
+}
+
+/* ── Live progress bar ───────────────────────────────────────────────────── */
+.tool-card-progress {
+  height: 2px;
+  background: #1a1a1a;
+  overflow: hidden;
+}
+
+.tool-card-progress::after {
+  content: '';
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #818cf8);
+  animation: barSlide var(--step-duration, 20000ms) var(--ease-in-out, cubic-bezier(0.4,0,0.2,1)) both;
+}
+
+/* ── Expandable output ───────────────────────────────────────────────────── */
+.tool-card-output {
+  border-top: 1px solid #1a1a1a;
+  padding: 9px 16px 11px;
+  animation: expandDown var(--dur-base, 220ms) var(--ease-out-expo, cubic-bezier(0.16,1,0.3,1)) both;
+}
+
+.tool-output-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tool-output-line {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 10px;
+  font-family: 'Courier New', monospace;
+  line-height: 1.8;
+}
+
+.tool-output-arrow {
+  color: var(--border-light);
+  flex-shrink: 0;
+}
+
+.tool-output-key {
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.tool-output-val {
+  color: var(--text-muted);
+  word-break: break-all;
+}
