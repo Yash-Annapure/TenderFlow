@@ -2,6 +2,7 @@
 
 <img width="1912" height="867" alt="landingpage" src="https://github.com/user-attachments/assets/8a5a4647-ce86-40bb-8c4d-be842c74fb5d" />
 
+---
 
 **AI-powered tender response agent** built for Meridian Intelligence GmbH.  
 Cuts tender drafting time from days to hours by auto-assembling company knowledge base content into a structured, human-reviewed first draft.
