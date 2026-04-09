@@ -37,7 +37,7 @@ Before a tender is processed, Meridian's internal documents are ingested via a 6
 | **Enrich** | Claude (model-routed) extracts structured JSON metadata via tool-use |
 | **Guard** | 3-layer integrity check flags or blocks suspicious content |
 | **Chunk** | Recursive text splitter creates ~512-token chunks |
-| **Embed** | Voyage AI `voyage-3-lite` produces 512-dim vectors |
+| **Embed** | Open AI produces 512-dim vectors |
 | **Upsert** | Chunks + embeddings stored in Supabase `kb_chunks` (pgvector) |
 
 **Model routing during enrichment:**
@@ -108,7 +108,7 @@ graph.invoke(None, config)
 |-------|-----------|
 | Agent framework | LangGraph `StateGraph` |
 | LLM | Anthropic Claude — Opus 4.6 / Sonnet 4.6 / Haiku 4.5 (model-routed) |
-| Embeddings | Voyage AI `voyage-3-lite` (512 dim) |
+| Embeddings | Open AI (512 dim) |
 | Vector store | Supabase pgvector |
 | Checkpointing | `langgraph-checkpoint-postgres` → Supabase PostgreSQL |
 | Backend | Python 3.11, FastAPI, `uv` |
@@ -138,7 +138,7 @@ TenderFlow/
 │   ├── core/
 │   │   ├── document_parser.py
 │   │   ├── chunker.py
-│   │   ├── embeddings.py     # Voyage AI client
+│   │   ├── embeddings.py     # Open AI client
 │   │   └── supabase_client.py
 │   ├── api/
 │   │   └── routers/
