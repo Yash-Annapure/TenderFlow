@@ -11,7 +11,7 @@ Cuts tender drafting time from days to hours by auto-assembling company knowledg
 
 ## What It Does
 
-TenderFlow ingests an incoming tender document (PDF/DOCX), analyses its requirements, retrieves the most relevant content from Meridian's knowledge base, drafts each section of the response, and hands off to a human reviewer — all via a single upload. The reviewer edits sections in a web UI and submits feedback; the agent incorporates changes and finalises the polished DOCX output.
+TenderFlow ingests an incoming tender document (PDF/DOCX), analyses its requirements, retrieves the most relevant content from knowledge base, drafts each section of the response, and hands off to a human reviewer — all via a single upload. The reviewer edits sections in a web UI and submits feedback; the agent incorporates changes and finalises the polished DOCX output.
 
 ---
 
