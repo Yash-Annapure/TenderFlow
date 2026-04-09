@@ -205,6 +205,22 @@
 
 .download-btn:hover { opacity: 0.85; color: #fff; }
 
+.download-btn-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.download-btn--pdf {
+  background: #c0392b;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  margin-top: 0;
+}
+
 /* ── Tool pipeline ──────────────────────────────────────────────────────── */
 .msg--pipeline {
   padding: 0 24px;
