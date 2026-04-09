@@ -240,4 +240,4 @@ bulk_ingest_kb_directory("../Knowledge Base/kb")
 | `SUPABASE_DB_URL` | PostgreSQL connection string (transaction-mode pooler) |
 | `MAX_HITL_ITERATIONS` | Max human review rounds (default: 3) |
 
-PPT LINK- https://www.canva.com/design/DAHGTZZuv7I?ui=eyJLIjp7IkEiOiI0NWU4NzU0ZC03ODQxLTQ4YjYtYjBjMi0wYjFkYmYwOTE3MjEifX0
+PPT LINK- https://canva.link/t5kaqka4082gfeb
