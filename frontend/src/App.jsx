@@ -246,7 +246,7 @@ export default function App() {
           )
         ) : !job ? (
           <LandingView onJobStarted={handleJobStarted} />
-        ) : job.status === 'awaiting_review' ? (
+        ) : (job.status === 'awaiting_review' || job.status === 'done') ? (
           <ReviewPanel
             job={job}
             onSubmit={handleReviewSubmit}
