@@ -4,7 +4,7 @@
 
 ---
 
-**AI-powered tender response agent** built for Meridian Intelligence GmbH.  
+**AI-powered tender response agent**   
 Cuts tender drafting time from days to hours by auto-assembling company knowledge base content into a structured, human-reviewed first draft.
 
 ---
