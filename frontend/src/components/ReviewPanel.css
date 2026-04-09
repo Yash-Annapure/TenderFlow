@@ -449,6 +449,13 @@
 }
 .review-download-btn:hover { opacity: 0.85; color: #fff; }
 
+.review-download-btn--pdf {
+  background: #c0392b;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
 .section-download-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 32px; height: 32px;

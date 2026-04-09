@@ -253,3 +253,49 @@
   color: #aaa;
   font-style: italic;
 }
+
+/* ── Print / PDF export ──────────────────────────────────────────────────── */
+@media print {
+  /* Hide all UI chrome — only the white document page should print */
+  .sidebar,
+  .review-topbar,
+  .review-panel-nav,
+  .review-actions,
+  .review-reiterate,
+  .section-nav-sidebar,
+  .review-edit-pane,
+  .chat-header,
+  .msg,
+  .chat-messages,
+  .chat-input-row { display: none !important; }
+
+  /* Flatten layout so the page fills the print canvas */
+  html, body { margin: 0; padding: 0; background: white; }
+
+  .app-layout,
+  .app-main,
+  .review-layout,
+  .review-content { display: block !important; height: auto !important; overflow: visible !important; }
+
+  .docx-page-wrap {
+    background: white !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+    height: auto !important;
+  }
+
+  .docx-page {
+    box-shadow: none !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    min-height: auto !important;
+  }
+
+  /* Ensure tables print with borders */
+  .docx-section-body table { border-collapse: collapse; }
+  .docx-section-body th,
+  .docx-section-body td { border: 1px solid #ccc !important; }
+  .docx-section-body thead tr { background: #1d3557 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
