@@ -270,28 +270,61 @@ def _build_justifications(
     robustness_score: float,
     final_score: float,
 ) -> dict[str, str]:
+    # ── Detect structural KB gaps ──────────────────────────────────────────────
+    m1_zero     = primary_scores.get("M1_track_record", -1) == 0.0
+    m4_zero     = primary_scores.get("M4_delivery_credibility", -1) == 0.0
+    m3_low      = primary_scores.get("M3_methodology_fit", 100) < 45
+
+    kb_gap_notes: list[str] = []
+    if m1_zero:
+        kb_gap_notes.append(
+            "No past tender response documents (doc_type: past_tender) in the knowledge base — "
+            "M1 Track Record was excluded from scoring. Upload completed bid/proposal documents "
+            "to enable this module."
+        )
+    if m4_zero:
+        kb_gap_notes.append(
+            "No CV documents (doc_type: cv) matched this tender's domain — "
+            "M4 Delivery Credibility scored 0. Upload CVs of relevant specialists."
+        )
+
+    # Domain mismatch signal: low compliance AND low primary together
+    domain_mismatch = compliance_score < 30 and primary_total < 45
+    if domain_mismatch:
+        kb_gap_notes.append(
+            "Domain mismatch likely: the knowledge base does not contain content aligned to this "
+            "tender's sector. The draft was generated from the tender text alone, not from "
+            "demonstrated firm experience. A real evaluator would likely identify this gap. "
+            "Consider whether this tender falls within the firm's actual capability and KB coverage."
+        )
+
     # ── Primary: show every module score ──────────────────────────────────────
     module_parts = [
         f"{_MODULE_LABELS.get(k, k)} {v:.0f}"
         for k, v in primary_scores.items()
         if k in _MODULE_LABELS
     ]
-    real_modules = {k: v for k, v in primary_scores.items() if k != "M5_pricing"}
-    if real_modules:
-        best_k = max(real_modules, key=real_modules.get)
-        worst_k = min(real_modules, key=real_modules.get)
+    real_modules = {k: v for k, v in primary_scores.items() if k not in ("M5_pricing", "_effective_weights")}
+    scored_modules = {k: v for k, v in real_modules.items() if v > 0}
+    if scored_modules:
+        best_k = max(scored_modules, key=scored_modules.get)
         strength_line = (
-            f"Strongest module: {_MODULE_LABELS.get(best_k, best_k)} "
-            f"({real_modules[best_k]:.0f}/100). "
-            f"Weakest: {_MODULE_LABELS.get(worst_k, worst_k)} "
-            f"({real_modules[worst_k]:.0f}/100)."
+            f"Strongest assessable module: {_MODULE_LABELS.get(best_k, best_k)} "
+            f"({scored_modules[best_k]:.0f}/100)."
         )
     else:
-        strength_line = ""
+        strength_line = "No modules could be positively assessed — KB content does not match tender domain."
+
+    excluded = [_MODULE_LABELS.get(k, k) for k, v in real_modules.items() if v == 0.0]
+    exclusion_note = (
+        f" Excluded from weighting (scored 0, weight redistributed): {', '.join(excluded)}."
+        if excluded else ""
+    )
     primary_just = (
         f"{primary_total:.1f}/100 — "
         + (", ".join(module_parts) + ". " if module_parts else "")
         + strength_line
+        + exclusion_note
     )
 
     # ── Compliance: interpret the score ───────────────────────────────────────
@@ -299,8 +332,17 @@ def _build_justifications(
         compliance_note = "Strong — mandatory tender requirements are well covered across drafted sections."
     elif compliance_score >= 65:
         compliance_note = "Moderate — most mandatory requirements addressed; review checklist for gaps before submission."
+    elif compliance_score >= 30:
+        compliance_note = (
+            "Needs work — significant mandatory requirements may be missing or inadequately addressed. "
+            "Cross-check the compliance checklist section by section before submission."
+        )
     else:
-        compliance_note = "Needs work — significant mandatory requirements may be missing. Cross-check the compliance checklist section by section."
+        compliance_note = (
+            "Critical gap — the drafted sections cover very few mandatory requirements. "
+            "This is likely caused by a domain mismatch between the tender scope and the firm's "
+            "knowledge base. The draft should not be submitted without substantial expert revision."
+        )
     compliance_just = f"{compliance_score:.1f}/100 — {compliance_note}"
 
     # ── Robustness: section confidence breakdown ───────────────────────────────
@@ -318,7 +360,7 @@ def _build_justifications(
             "supplement with specific figures, client names, and measurable outcomes."
         )
     if robustness_score >= 70:
-        robust_note = f"Good evidence density. {grounding_line}"
+        robust_note = f"Adequate evidence density. {grounding_line}"
     elif robustness_score >= 50:
         robust_note = f"Moderate evidence density. {grounding_line}"
     else:
@@ -330,21 +372,33 @@ def _build_justifications(
     if final_score >= 75:
         verdict = "Ready for human review and final polish before submission."
     elif final_score >= 60:
-        verdict = "Usable first draft — targeted strengthening recommended. See Action Items."
+        verdict = "Usable first draft — targeted strengthening recommended before submission."
+    elif final_score >= 45:
+        verdict = (
+            "Draft requires significant expert revision. The score reflects knowledge base "
+            "coverage, not submission-readiness — do not submit without thorough review."
+        )
     else:
-        verdict = "Significant gaps remain. Address Action Items before submission."
+        verdict = (
+            "This draft is not submission-ready. The knowledge base does not adequately "
+            "support this tender's domain. See KB Gaps below for specific upload recommendations."
+        )
     final_just = (
         f"{final_score:.1f}/100 ({_band(final_score)}) — "
         f"Primary Score {primary_total:.0f} × 60% + Quality Score {quality_composite:.0f} × 40%. "
         + verdict
     )
 
-    return {
+    result = {
         "Primary Score": primary_just,
         "Compliance Coverage": compliance_just,
         "Robustness Index": robustness_just,
         "Final Score": final_just,
     }
+    if kb_gap_notes:
+        result["KB Gaps & Recommendations"] = " | ".join(kb_gap_notes)
+
+    return result
 
 
 # ── Quality scoring ────────────────────────────────────────────────────────────
@@ -392,9 +446,9 @@ def _score_compliance(sections: list[dict], checklist: list[dict]) -> tuple[floa
                             "Score 0-100: what % of these requirements are addressed in the draft sections?\n"
                             "Mandatory items count 70% of the score, optional 30%.\n"
                             "Respond with only a number.\n\n"
-                            f"Mandatory requirements:\n{json.dumps(mandatory[:15], indent=2)}\n\n"
-                            f"Optional requirements:\n{json.dumps(optional[:10], indent=2)}\n\n"
-                            f"Drafted sections (excerpt):\n{drafts[:3000]}"
+                            f"Mandatory requirements:\n{json.dumps(mandatory[:25], indent=2)}\n\n"
+                            f"Optional requirements:\n{json.dumps(optional[:15], indent=2)}\n\n"
+                            f"Drafted sections (all sections):\n{drafts[:10000]}"
                         ),
                     }
                 ],
@@ -481,7 +535,7 @@ def _score_robustness(sections: list[dict]) -> tuple[float, dict | None]:
                             "  -10 per unsupported assertion (claim with no evidence)\n"
                             "  Base score: 30\n"
                             "Respond with only a number.\n\n"
-                            f"Prose sections:\n{drafts[:3000]}"
+                            f"Prose sections:\n{drafts[:6000]}"
                         ),
                     }
                 ],

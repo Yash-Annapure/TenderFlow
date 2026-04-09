@@ -583,6 +583,10 @@ def _compute_primary_scores(state: TenderState, retrieved_chunks: dict) -> dict[
     scores["M5_pricing"] = _score_pricing(state, retrieved_chunks)
 
     # Weight reallocation for absent doc_types
+    # If a doc_type was never retrieved (no KB content of that type available),
+    # treat the corresponding module as unassessable and redistribute its weight
+    # to the remaining modules — same logic as M3/M4, now also applied to M1.
+    kb_has_past_tender = bool(past_chunks)
     kb_has_cv          = bool(cv_chunks)
     kb_has_methodology = bool(methodology_chunks)
 
@@ -596,6 +600,8 @@ def _compute_primary_scores(state: TenderState, retrieved_chunks: dict) -> dict[
     }
 
     unassessable = []
+    if not kb_has_past_tender:
+        unassessable.append("M1_track_record")
     if not kb_has_methodology:
         unassessable.append("M3_methodology_fit")
     if not kb_has_cv:

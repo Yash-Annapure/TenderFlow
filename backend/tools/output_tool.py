@@ -136,6 +136,23 @@ def _set_table_full_width(table) -> None:
     tblPr.append(tblW)
 
 
+def _set_cell_margins(cell, top: int = 120, bottom: int = 120,
+                      left: int = 180, right: int = 180) -> None:
+    """Set internal cell padding (in twips). 1 pt = 20 twips."""
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    existing = tcPr.find(qn('w:tcMar'))
+    if existing is not None:
+        tcPr.remove(existing)
+    tcMar = OxmlElement('w:tcMar')
+    for side, val in [('top', top), ('left', left), ('bottom', bottom), ('right', right)]:
+        m = OxmlElement(f'w:{side}')
+        m.set(qn('w:type'), 'dxa')
+        m.set(qn('w:w'), str(val))
+        tcMar.append(m)
+    tcPr.append(tcMar)
+
+
 # ── Table renderer ─────────────────────────────────────────────────────────────
 
 def _add_docx_table(doc: Document, rows: list[list[str]]) -> None:
@@ -334,6 +351,8 @@ def _add_cover(doc: Document, state: dict) -> None:
     _set_table_full_width(cover_table)
     cover_cell = cover_table.rows[0].cells[0]
     _shade_cell(cover_cell, _NAVY_HEX)
+    # padding: top=44px≈630twips, right/left=56px≈800twips, bottom=40px≈570twips
+    _set_cell_margins(cover_cell, top=630, bottom=570, left=800, right=800)
 
     # "Technical" — top-right feel (right-aligned paragraph inside cell)
     cp0 = cover_cell.paragraphs[0]
@@ -367,6 +386,8 @@ def _add_cover(doc: Document, state: dict) -> None:
     _set_table_full_width(meta_table)
     meta_cell = meta_table.rows[0].cells[0]
     _shade_cell(meta_cell, "F0F4F8")
+    # padding: top/bottom=10px≈145twips, left/right=56px≈800twips
+    _set_cell_margins(meta_cell, top=145, bottom=145, left=800, right=800)
 
     mp = meta_cell.paragraphs[0]
     mp.paragraph_format.space_before = Pt(6)
@@ -548,8 +569,11 @@ def _add_readiness_assessment(doc: Document, state: dict) -> None:
                     _shade_cell(cell, _LIGHT_ROW_HEX)
         doc.add_paragraph()
 
-    # Score justifications
+    # Score justifications (one paragraph per module)
     justifications = state.get("score_justifications", {})
+    KB_GAPS_KEY = "KB Gaps & Recommendations"
+    kb_gaps_text = justifications.pop(KB_GAPS_KEY, None) if justifications else None
+
     if justifications:
         jh = doc.add_paragraph()
         jh.add_run("Score Justifications").bold = True
@@ -558,7 +582,21 @@ def _add_readiness_assessment(doc: Document, state: dict) -> None:
             p.add_run(f"{module}:  ").bold = True
             p.add_run(_sanitize(str(justification)))
 
-    # Action items
+    # KB Gaps & Recommendations — explicit section when present
+    if kb_gaps_text:
+        doc.add_paragraph()
+        kbh = doc.add_paragraph()
+        kbr = kbh.add_run("Knowledge Base Gaps & Recommendations")
+        kbr.bold = True
+        kbr.font.color.rgb = _WARN_COLOUR
+        for note in _sanitize(kb_gaps_text).split(" | "):
+            note = note.strip()
+            if note:
+                p = doc.add_paragraph(style="List Bullet")
+                p.add_run(note)
+
+    # Action items — section-level gaps and low confidence drafts
+    doc.add_paragraph()
     ai_heading = doc.add_paragraph()
     ai_heading.add_run("Action Items").bold = True
 
@@ -566,7 +604,29 @@ def _add_readiness_assessment(doc: Document, state: dict) -> None:
     gap_sections = [s for s in sections if s.get("gap_flag")]
     low_no_gap   = [s for s in sections if s.get("confidence") == "LOW" and not s.get("gap_flag")]
 
-    if gap_sections or low_no_gap:
+    # Append KB upload recommendations as action items when M1=0
+    primary_scores = state.get("primary_scores", {})
+    kb_action_items: list[str] = []
+    if primary_scores.get("M1_track_record", -1) == 0.0:
+        kb_action_items.append(
+            "Upload past bid/proposal documents to the Knowledge Base (doc_type: past_tender) "
+            "to enable Track Record (M1) scoring. This single action can raise the Primary Score by 10-20 points."
+        )
+    if primary_scores.get("M4_delivery_credibility", -1) == 0.0:
+        kb_action_items.append(
+            "Upload specialist CVs relevant to this tender's domain (doc_type: cv) "
+            "to enable Delivery Credibility (M4) scoring."
+        )
+
+    final_score = state.get("final_score", 0.0)
+    if final_score < 45 and not gap_sections:
+        kb_action_items.append(
+            "Score below 45 with no section-level gaps detected: this tender's domain likely "
+            "falls outside the firm's current knowledge base coverage. Verify the firm can "
+            "credibly deliver this scope before submitting."
+        )
+
+    if gap_sections or low_no_gap or kb_action_items:
         for s in gap_sections:
             p = doc.add_paragraph(style="List Bullet")
             run = p.add_run(f"[{s['section_name']}]  ")
@@ -582,6 +642,9 @@ def _add_readiness_assessment(doc: Document, state: dict) -> None:
                 "Low-confidence draft — KB content found via fallback retrieval only. "
                 "Review and supplement with project-specific evidence."
             )
+        for item in kb_action_items:
+            p = doc.add_paragraph(style="List Bullet")
+            p.add_run(item)
     else:
         doc.add_paragraph("No critical knowledge-base gaps identified for this tender.")
 
