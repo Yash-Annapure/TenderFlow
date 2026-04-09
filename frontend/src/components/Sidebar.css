@@ -402,6 +402,24 @@
   color: var(--text-dim);
 }
 
+.sidebar-recent-archive-btn {
+  width: 100%;
+  padding: 5px 10px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.sidebar-recent-archive-btn:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
 /* ── Footer ─────────────────────────────────────────────────────────────── */
 .sidebar-footer {
   padding: 12px;

@@ -206,7 +206,8 @@ export default function App() {
     }
   }, [job?.status]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const historyItem = history.find(h => h.id === historyViewId) ?? null
+  const isArchiveView = historyViewId === '__archive__'
+  const historyItem   = isArchiveView ? null : (history.find(h => h.id === historyViewId) ?? null)
 
   return (
     <div className="app-layout">
@@ -218,7 +219,13 @@ export default function App() {
         onSelectHistory={setHistoryViewId}
       />
       <div className="app-main">
-        {historyItem ? (
+        {isArchiveView ? (
+          <ArchiveView
+            history={history}
+            onSelect={setHistoryViewId}
+            onClose={() => setHistoryViewId(null)}
+          />
+        ) : historyItem ? (
           (historyItem.job?.status === 'awaiting_review' || historyItem.job?.status === 'done') ? (
             <ReviewPanel
               job={historyItem.job}
@@ -296,6 +303,49 @@ function _buildMessagesFromJob(job) {
     })
   }
   return msgs
+}
+
+function ArchiveView({ history, onSelect, onClose }) {
+  const STATUS_LABELS = {
+    done:            { label: 'Complete',     color: '#10a37f' },
+    awaiting_review: { label: 'Review Ready', color: '#6366f1' },
+    error:           { label: 'Error',        color: '#ef4444' },
+    analysing:       { label: 'Analysing',    color: '#f59e0b' },
+    drafting:        { label: 'Drafting',     color: '#f59e0b' },
+  }
+
+  return (
+    <div className="archive-view">
+      <div className="archive-header">
+        <h2 className="archive-title">All Tenders</h2>
+        <button className="archive-close" onClick={onClose}>✕ Close</button>
+      </div>
+      <div className="archive-list">
+        {history.map(item => {
+          const s = STATUS_LABELS[item.job?.status] || { label: item.job?.status || '—', color: '#8e8ea0' }
+          const score = item.job?.score_json?.final_score
+          return (
+            <button
+              key={item.id}
+              className="archive-item"
+              onClick={() => onSelect(item.id)}
+            >
+              <div className="archive-item-name">{item.job?.tender_filename || 'Tender'}</div>
+              <div className="archive-item-meta">
+                <span className="archive-item-status" style={{ color: s.color }}>{s.label}</span>
+                {score != null && (
+                  <span className="archive-item-score">{score.toFixed(1)}/100</span>
+                )}
+                <span className="archive-item-time">
+                  {new Date(item.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                </span>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 function LandingView({ onJobStarted }) {

@@ -172,7 +172,7 @@ export default function Sidebar({ currentJob, tokenLog, history = [], historyVie
             <>
               <div className="sidebar-section-title">Recent</div>
               <div className="sidebar-recent">
-                {history.map(item => (
+                {history.slice(0, 3).map(item => (
                   <button
                     key={item.id}
                     className={`sidebar-recent-item${historyViewId === item.id ? ' sidebar-recent-item--active' : ''}`}
@@ -191,6 +191,14 @@ export default function Sidebar({ currentJob, tokenLog, history = [], historyVie
                     </span>
                   </button>
                 ))}
+                {history.length > 3 && (
+                  <button
+                    className="sidebar-recent-archive-btn"
+                    onClick={() => onSelectHistory?.('__archive__')}
+                  >
+                    +{history.length - 3} archived
+                  </button>
+                )}
               </div>
             </>
           )}
