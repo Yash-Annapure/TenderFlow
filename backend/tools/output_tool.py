@@ -19,6 +19,7 @@ python-docx is used directly — no system-level PDF dependencies needed.
 
 import logging
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -47,6 +48,14 @@ _CONFIDENCE_LABELS = {
     "MEDIUM": "[MEDIUM CONFIDENCE]",
     "LOW": "[LOW CONFIDENCE]",
 }
+
+
+_XML_ILLEGAL = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+
+
+def _sanitize(text: str) -> str:
+    """Strip XML-illegal control characters that would corrupt DOCX XML."""
+    return _XML_ILLEGAL.sub('', text).replace('\r\n', '\n').replace('\r', '\n')
 
 
 def _score_band(score: float) -> str:
@@ -109,7 +118,9 @@ def _add_cover(doc: Document, state: dict) -> None:
 
     p2 = doc.add_paragraph()
     p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p2.add_run(f"Meridian Intelligence GmbH\n{datetime.now().strftime('%B %d, %Y')}")
+    p2.add_run("Meridian Intelligence GmbH")
+    p2.add_run().add_break()  # soft line break — keeps same paragraph, no \n in XML
+    p2.add_run(datetime.now().strftime('%B %d, %Y'))
 
     final_score = state.get("final_score", 0.0)
     band = _score_band(final_score)
@@ -198,7 +209,7 @@ def _add_readiness_assessment(doc: Document, state: dict) -> None:
         for module, justification in justifications.items():
             p = doc.add_paragraph()
             p.add_run(f"{module}:  ").bold = True
-            p.add_run(justification)
+            p.add_run(_sanitize(str(justification)))
 
     # Action Items — gap flags + LOW-confidence sections
     doc.add_heading("Action Items", level=2)
@@ -233,7 +244,7 @@ def _add_section(doc: Document, section: dict) -> None:
 
     # Heading with inline confidence indicator
     heading = doc.add_heading(level=2)
-    heading.add_run(section_name)
+    heading.add_run(_sanitize(section_name))
     conf_run = heading.add_run(f"   {_CONFIDENCE_LABELS.get(confidence, confidence)}")
     conf_run.font.size = Pt(9)
     conf_run.bold = False
@@ -242,23 +253,30 @@ def _add_section(doc: Document, section: dict) -> None:
     # Gap warning
     if gap_flag:
         p = doc.add_paragraph()
-        warn = p.add_run(f"Knowledge-base gap: {gap_flag}")
+        warn = p.add_run(f"Knowledge-base gap: {_sanitize(gap_flag)}")
         warn.italic = True
         warn.font.color.rgb = _WARN_COLOUR
 
     # Body content — priority: finalised > user_edits > draft_text
-    content: str = (
+    raw_content: str = (
         section.get("finalised_content")
         or section.get("user_edits")
         or section.get("draft_text")
         or ""
     )
+    content = _sanitize(raw_content)
 
     if content:
-        for para_text in content.split("\n\n"):
-            para_text = para_text.strip()
-            if para_text:
-                doc.add_paragraph(para_text)
+        for para_block in content.split("\n\n"):
+            # Each block may still contain single \n (soft line breaks within a para)
+            lines = [l.strip() for l in para_block.split("\n") if l.strip()]
+            if not lines:
+                continue
+            p = doc.add_paragraph()
+            for j, line in enumerate(lines):
+                if j > 0:
+                    p.add_run().add_break()  # soft line break between lines in same block
+                p.add_run(line)
     else:
         p = doc.add_paragraph()
         p.add_run("[No content generated for this section]").italic = True
@@ -267,7 +285,7 @@ def _add_section(doc: Document, section: dict) -> None:
     sources = section.get("sources_used", [])
     if sources:
         p = doc.add_paragraph()
-        run = p.add_run("Sources: " + " · ".join(sources))
+        run = p.add_run("Sources: " + " · ".join(_sanitize(s) for s in sources))
         run.font.size = Pt(9)
         run.italic = True
         run.font.color.rgb = _GREY
